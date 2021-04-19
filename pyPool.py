@@ -11,7 +11,7 @@ import pywt
 from time import time
 #detection centrata nella buca con mezzo secondo di dati
 #dovrai usare pywt.cwt()
-windows=True
+windows=False
 
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica
 def derivata(serie):
@@ -25,21 +25,66 @@ def loadwav(file):
     samplerate, data = read(file)
     return (samplerate, data*813.5330/32767) # quel numerino è per la calibrazione del sensore audio
 
-def moveaverage(serie, intervallo):
+#La vecchia media mobile: lenta ma testata
+def moveaverag(serie, intervallo):
     a=[]
     for j in range (0,len(serie)-intervallo):
         a.append(np.average(serie[j:j+intervallo]))
     return(a)
+    
+def rollingavg(serie, intervallo):
+    a=[]
+    j=intervallo+1
+    a.append(np.average(serie[0:intervallo]))
+    while (j<len(serie)-intervallo):
+        j+=1
+        incr=(serie[j]-serie[j-intervallo])/intervallo
+        a.append(a[-1]+incr)
+    for j in range (len(serie)-intervallo,len(serie)):
+        a.append(np.average(serie[j:len(serie)]))
+    return(a)  
+    
+def rollingstd(serie, intervallo):
+    a=[]
+    j=intervallo+1
+    a.append(np.std(serie[0:intervallo]))
+    while (j<len(serie)-intervallo):
+        j+=1
+        incr=(serie[j]-serie[j-intervallo])/intervallo
+        a.append(np.std(serie[j:j+intervallo]))
+    for j in range (len(serie)-intervallo,len(serie)):
+        a.append(np.average(serie[j:len(serie)]))
+    return(a)      
 
+def deviazionemobile(serie,intervallo):
+    varianza=[]
+    media=[]
+    j=intervallo+1
+    varianza.append(np.var(serie[0:intervallo]))
+    media.append(np.average(serie[0:intervallo]))
+    while (j<len(serie)-intervallo):
+        j+=1
+        incrmu=(serie[j]-serie[j-intervallo])/intervallo
+        media.append(media[-1]+incrmu)
+        #incrsigma=((serie[j]-media[-2])**2-(serie[j-intervallo]-media[-2])**2)/intervallo
+        incrsigma=(serie[j]-media[-2])*(serie[j]-media[-1])-(serie[j-intervallo]-media[-2])*(serie[j-intervallo]-media[-1])
+        varianza.append(incrsigma/intervallo)
+    for j in range (len(serie)-intervallo,len(serie)):
+        media.append(np.average(serie[j:len(serie)]))
+        #incrsigma=((serie[j]-media[-2])**2-(serie[j-intervallo]-media[-2])**2)/intervallo
+        incrsigma=(serie[j]-media[-2])*(serie[j]-media[-1])-(serie[j-intervallo]-media[-2])*(serie[j-intervallo]-media[-1])
+        varianza.append(varianza[-1]+incrsigma/intervallo)
+    return (np.sqrt(varianza))
+        
 def plottamediamobile(wav,campioni):
-    mediamobile=moveaverage(wav,campioni)
+    mediamobile=rollingavg(wav,campioni)
     xaxis=np.linspace(0,len(mediamobile), num=len(mediamobile))
     plt.plot(xaxis,mediamobile,label='moving average')
     plt.legend()
 
 def plottaserietemporale(serie,campionamento):
     xaxis=np.linspace(0,len(serie)/campionamento, num=len(serie))
-    plt.plot(xaxis,serie,label='time series')
+    plt.plot(xaxis,serie,label='pressure')
     plt.xlabel('Time [s]')
     plt.xlim(min(xaxis),max(xaxis))
     plt.legend()
@@ -71,7 +116,17 @@ def filtrabuca (sample, sampling):
         buca=sample[estremi[0]:estremi[1]]*signal.windows.hann(sampling)
     return (buca)
 
-loadir='/home/kibuzo/rotoliamo/misura/unzipped/' #controlla
+def rollinghole (sample, sampling, width):
+    mean=rollingavg(sample**2,width)
+    sigma=rollingstd(sample**2,4*width)
+    #zeropad sigma
+    sigma=np.array(sigma+np.zeros(len(mean)-len(sigma)).tolist())
+    print(len(mean))
+    print (len(sigma))
+    ratio=np.divide(mean,sigma)
+    return (np.array(ratio.tolist()+np.zeros(200).tolist()))
+    
+loadir='/home/kibuzo/Rotoliamo/Dati/misura/'
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/'
@@ -82,16 +137,23 @@ for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
 
-prova=loadwav(filelist[2])
+prova=loadwav(filelist[-3])
 s=0.01 #(durata in secondi della finestra mobile)
 #creo la finestra
 N=math.floor(prova[0]*s)
 wind=signal.windows.gaussian(N,round(prova[0]/200))
 #wind=signal.windows.hann(N)
 
-plt.subplot(212)
+plt.subplot(313)
 ciao=plottaspettrogramma(prova[1], N, prova[0])
 
-plt.subplot(211)
+plt.subplot(312)
 plottaserietemporale(prova[1],prova[0])
+
+plt.subplot (311)
+y=rollinghole(prova[1], prova[0], 200).tolist()
+x=np.linspace(0,len(y)/prova[0],num=len(y))
+plt.plot(x,np.zeros(0).tolist()+y, label='trigger signal')
+plt.xlim(0,max(x))
+plt.legend()
 plt.show()
