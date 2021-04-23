@@ -1,4 +1,5 @@
 #ToDo: Stimare la larghezza delle due finestre mobili per il trigger, una per la media fuori buca che deve rimanere tale anche dentro la buca (quindi 10 volte più larga della tipica buca) e una che è una correzione della media puntuale anche dentro la buca, quindi più stretta. La varianza andrebbe fatta fuori buca, quindi sul campione mobile, FAI LA VARIANZA MOBILE.
+#Achtung: le tue medie mobili sembrano produrre in uscita vettori che sono lunghi almeno 2 volte la lunghezza della finestra, il che credo che abbia senso ma non ho tempo di controllarlo, nel dubbio usalo solo su vettori lunghi
 from scipy.io.wavfile import read
 from scipy.signal import spectrogram
 import os
@@ -13,7 +14,7 @@ from matplotlib.colors import LogNorm
 import pandas as pd
 #detection centrata nella buca con mezzo secondo di dati
 #dovrai usare pywt.cwt()
-windows=True
+windows=False
 
 @plt.FuncFormatter
 def fake_log(x, pos):
@@ -184,6 +185,7 @@ def rollinghole (sample, sampling, width):
     ratio=np.divide(mean[100:],sigma[:-100])
     return (np.array(ratio.tolist()+np.zeros(200).tolist()))
 
+#Fa la trasformata di wavelet suddividendo gli intervalli di frequenze in nlogbin, da migliorare.
 def wavelet (sig, nlogbin):
     fsampling=44100
     #dt=0.01
@@ -204,12 +206,12 @@ def triggernew(segnale, largewindow, smallwindow):
     sampling=44100
     rollinglarge=(rollingavgnonzero(segnale**2, 10000))
     rollingsmall=(rollingavg(segnale**2, 200))#[(largewindow-smallwindow):])
-    nsecutili=math.floor(len(rollingsmall))#[:-(largewindow-smallwindow)])/sampling)
+    nsecutili=math.floor(len(rollingsmall)/sampling)#[:-(largewindow-smallwindow)])/sampling)
     rollinglargeaffettato=rollinglarge[:nsecutili*sampling]
     rollingsmallaffettato=rollingsmall[:nsecutili*sampling]
     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
-    xtime=np.linspace((largewindow-smallwindow)/sampling,len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato))
-    return(xtime, trigger, rollingsmall, rollinglarge)
+    xtime=np.linspace(0, len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato))
+    return(xtime, trigger, rollingsmallaffettato, rollinglargeaffettato)
 
 
 
@@ -236,34 +238,39 @@ for filename in os.listdir(loadir):
 #     rollingsmallaffettato=rollingsmall[:nsecutili*44100]
 #     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
 #     plt.plot(np.linspace(0,len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato)),np.divide(rollingsmallaffettato,rollinglargeaffettato))
+def triplot (segnale,sampling):
+    Trigger=triggernew(segnale, 10000,200)
+    plt.subplot(311)
+    plottaserietemporale(np.sqrt(segnale**2),sampling)
+    plt.subplot(312)
+    plt.plot(Trigger[0],Trigger[2], label='stima puntuale della pressione rms')
+    plt.plot(Trigger[0],Trigger[3], label='stima del background rms')
+    plt.xlim(0, max(Trigger[0]))
+    plt.legend()
+    plt.subplot(313)
+    plt.plot(Trigger[0], Trigger[1], label='segnale del trigger')
+    plt.xlim(0,max(Trigger[0]))
+    plt.legend()
+    plt.show()
+    
 
-
-prova=loadwav(filelist[0])
-Triggah=triggernew(prova[1], 10000, 200)
-s=0.01 #(durata in secondi della finestra mobile)
-#creo la finestra
-N=math.floor(prova[0]*s)
-wind=signal.windows.gaussian(N,round(prova[0]/200))
-#wind=signal.windows.hann(N)
-
-plt.subplot(313)
-# ciao=plottaspettrogramma(prova[1], N, prova[0])
-#var=rollingstd(rollingavg(prova[1]**2, 200),200)
-# plt.plot(var, label='varianza')
-plt.plot(Triggah[0], Triggah[1])
-
-plt.subplot(312)
-plottaserietemporale(np.sqrt(prova[1]**2),prova[0])
-
-
-plt.subplot (311)
-plt.plot(Triggah[0],Triggah[2], label='stima puntuale della pressione rms')
-plt.plot(Triggah[0],Triggah[3], label='stima del background rms')
-plt.legend()
-#plt.plot(r)
-# y=rollinghole(prova[1], prova[0], 200).tolist()
-# x=np.linspace(0,len(y)/prova[0],num=len(y))
-# plt.plot(x,y, label='trigger signal')
-# plt.xlim(0,max(x))
+prova=loadwav(filelist[8])
+# Triggah=triggernew(prova[1], 10000, 200)
+# s=0.01 #(durata in secondi della finestra mobile)
+# #creo la finestra
+# N=math.floor(prova[0]*s)
+# wind=signal.windows.gaussian(N,round(prova[0]/200))
+# #wind=signal.windows.hann(N)
+# 
+# plt.subplot(313)
+# plt.plot(Triggah[0], Triggah[1])
+# 
+# plt.subplot(312)
+# plottaserietemporale(np.sqrt(prova[1]**2),prova[0])
+# 
+# 
+# plt.subplot (311)
+# plt.plot(Triggah[0],Triggah[2], label='stima puntuale della pressione rms')
+# plt.plot(Triggah[0],Triggah[3], label='stima del background rms')
 # plt.legend()
-plt.show()
+# plt.show()
