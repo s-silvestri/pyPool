@@ -20,6 +20,26 @@ windows=False
 def fake_log(x, pos):
     'The two args are the value and tick position'
     return r'$10^{%2d}$' % (x)
+    
+def varianzastupida(set, length):
+    var=[]
+    for j in range (0, len(set)-length):
+        var.append(np.var(set[j:j+length]))
+    return(var)
+    
+def varianzaintelligente(set, length):
+    var=[]
+    media=[]
+    epsilon=[]
+    for j in range (0,length):
+        var.append(np.var(set[0:j]))
+        media.append(np.mean(set[0:j]))
+        epsilon.append(np.abs(np.sum(set[0:j]-media[j])))
+    for j in range (length+1, len(set)-length):
+        media.append((set[j]-set[j-length])/length)
+        epsilon.append(np.abs(np.sum(set[j-length:j]-media[-1])))
+        var.append(1)
+    return(epsilon)
 
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica
 def derivata(serie):
@@ -40,6 +60,11 @@ def moveaverag(serie, intervallo):
         a.append(np.average(serie[j:j+intervallo]))
     return(a)
 
+def rollingavgpd(serie, intervallo):
+    pdserie=pd.Series(serie)
+    avg=pdserie.rolling(intervallo).mean()
+    return (avg.to_numpy())
+    
 def rollingavg(serie, intervallo):
     a=np.zeros(intervallo).tolist()
     j=intervallo
@@ -52,18 +77,30 @@ def rollingavg(serie, intervallo):
         a.append(np.average(serie[j:len(serie)]))
     return(a)
 
-def rollingavgnonzero(serie, intervallo):
-    a=np.zeros(intervallo).tolist()
-    j=intervallo
-    a.append(np.average(serie[0:intervallo]))
+def rollingavgnonzero(serie, intervallo, media200):
+    init=np.average(serie[0:intervallo])
+    a=[]
+    trigUP=[]
+    for j in range (0,intervallo):
+        a.append(init)
     while (j<len(serie)-intervallo):
         j+=1
-        incr=(serie[j]-serie[j-intervallo])/intervallo
-        appendor=(a[-1]+incr)
-        if (appendor>0):
-            a.append(a[-1]+incr)
+        if(media200[j-1]>1.5*a[j-1]):
+            trigUP.append(j) 
+            a.append(a[-j])
+            #devo salvarmi questo intervallo e ricordarmi di escluderlo dall'appendor
         else:
-            a.append(a[-1])
+            if trigUP and j in range (min(trigUP)+intervallo, max(trigUP)+intervallo):
+                incr=(serie[j]-serie[j-2*intervallo])/intervallo
+                if (j-intervallo)==max(trigUP): 
+                    trigUP=[]
+            else:
+                incr=(serie[j]-serie[j-intervallo])/intervallo
+            appendor=(a[-1]+incr)
+            if (appendor>0):
+                a.append(a[-1]+incr)
+            else:
+                a.append(a[-1])
     for j in range (len(serie)-intervallo,len(serie)-1):
         appendor=np.average(serie[j:len(serie)])
         if (appendor>0):
@@ -71,6 +108,13 @@ def rollingavgnonzero(serie, intervallo):
         else:
             a.append(a[-1])
     return(a)
+
+def rollingtrig(serie, lungo, corto):
+    seriepd=pd.Series(serie)
+    largemean=seriepd.rolling(lungo).mean()
+    largevar=seriepd.rolling(lungo).var()
+    smallmean=seriepd.rolling(corto).mean()
+    return (smallmean.to_numpy(), largemean.to_numpy(), largevar.to_numpy())
 
 def rollingstd(serie, intervallo):
     a=[]
@@ -154,18 +198,6 @@ def triggerold (sample, width, thresh):
     print ('Tempo medio di calcolo del trigger: ' + str(1e6*(toc-tic)/j) + ' us')
     return (Trigger,j)
 
-def trigger (sample, width, thresh):
-    tic=time()
-    for j in range (0,len(sample)-width):
-        Trigger=0
-        if max (rollinghole(sample[j:j+width], 44100, 200)>30):
-            Trigger=1
-            break
-    toc=time()
-    print ('Tempo di esecuzione per ' + str(j) + ' cicli di esecuzione del trigger= ' + str(toc-tic)+ ' s')
-    print ('Tempo medio di calcolo del trigger: ' + str(1e6*(toc-tic)/j) + ' us')
-    return (Trigger,j)
-
 def filtrabuca (sample, sampling):
     Where=triggerold(sample, 4410, 1000)
     buca=[]
@@ -202,20 +234,22 @@ def wavelet (sig, nlogbin):
     fig.colorbar(imm)
     plt.show()
 
-def triggernew(segnale, largewindow, smallwindow):
+def trigger(segnale, largewindow, smallwindow):
     sampling=44100
-    rollinglarge=(rollingavgnonzero(segnale**2, 10000))
-    rollingsmall=(rollingavg(segnale**2, 200))#[(largewindow-smallwindow):])
+    rollingsmall=(rollingavg(np.sqrt(segnale**2), 200)) #[(largewindow-smallwindow):])
+    rollinglarge=(rollingavgnonzero(np.sqrt(segnale**2), 10000, rollingsmall))
     nsecutili=math.floor(len(rollingsmall)/sampling)#[:-(largewindow-smallwindow)])/sampling)
     rollinglargeaffettato=rollinglarge[:nsecutili*sampling]
     rollingsmallaffettato=rollingsmall[:nsecutili*sampling]
     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
     xtime=np.linspace(0, len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato))
     return(xtime, trigger, rollingsmallaffettato, rollinglargeaffettato)
-
+    
 
 
 loadir='/home/kibuzo/Rotoliamo/Dati/misura/'
+loadir='/home/kibuzo/Rotoliamo/Topate/tempdata/'
+
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Longnavacchio/'
@@ -239,22 +273,24 @@ for filename in os.listdir(loadir):
 #     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
 #     plt.plot(np.linspace(0,len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato)),np.divide(rollingsmallaffettato,rollinglargeaffettato))
 def triplot (segnale,sampling):
-    Trigger=triggernew(segnale, 10000,200)
+    #Trigger=triggernew(segnale, 10000,200)
+    Mediemobili=rollingtrig(np.sqrt(segnale**2), 10000,200)
+    xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
     plt.subplot(311)
     plottaserietemporale(np.sqrt(segnale**2),sampling)
     plt.subplot(312)
-    plt.plot(Trigger[0],Trigger[2], label='stima puntuale della pressione rms')
-    plt.plot(Trigger[0],Trigger[3], label='stima del background rms')
-    plt.xlim(0, max(Trigger[0]))
+    plt.plot(xvec,Mediemobili[0], label='stima puntuale della pressione rms')
+    plt.plot(xvec,Mediemobili[1], label='stima del background rms')
+    plt.xlim(0, max(xvec))
     plt.legend()
     plt.subplot(313)
-    plt.plot(Trigger[0], Trigger[1], label='segnale del trigger')
-    plt.xlim(0,max(Trigger[0]))
+    plt.plot(xvec, ((Mediemobili[0]-Mediemobili[1])**2)/Mediemobili[2], label='segnale del trigger')
+    plt.xlim(0,max(xvec))
     plt.legend()
     plt.show()
     
 
-prova=loadwav(filelist[8])
+prova=loadwav(filelist[0])
 # Triggah=triggernew(prova[1], 10000, 200)
 # s=0.01 #(durata in secondi della finestra mobile)
 # #creo la finestra
