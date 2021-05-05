@@ -12,6 +12,7 @@ import pywt
 from time import time
 from matplotlib.colors import LogNorm
 import pandas as pd
+import scipy as sp
 #detection centrata nella buca con mezzo secondo di dati
 #dovrai usare pywt.cwt()
 windows=False
@@ -20,6 +21,16 @@ windows=False
 def fake_log(x, pos):
     'The two args are the value and tick position'
     return r'$10^{%2d}$' % (x)
+    
+def secondi(campioni):
+    return (campioni/44100)
+    
+def campioni(secondi):
+    return (math.floor(secondi*44100))
+
+def PtoLeq(P):
+    P0=2e-5
+    return (10*np.log10(P**2/P0**2))
     
 def varianzastupida(set, length):
     var=[]
@@ -111,9 +122,9 @@ def rollingavgnonzero(serie, intervallo, media200):
 
 def rollingtrig(serie, lungo, corto):
     seriepd=pd.Series(serie)
-    largemean=seriepd.rolling(lungo).mean()
+    largemean=seriepd.rolling(lungo).median()
     largevar=seriepd.rolling(lungo).var()
-    smallmean=seriepd.rolling(corto).mean()
+    smallmean=seriepd.rolling(corto).median()
     return (smallmean.to_numpy(), largemean.to_numpy(), largevar.to_numpy())
 
 def rollingstd(serie, intervallo):
@@ -127,44 +138,11 @@ def rollingstd(serie, intervallo):
         a.append(np.average(serie[j:len(serie)]))
     return(a)
 
-# def deviazionemobile(serie,intervallo):
-#     varianza=[]
-#     media=[]
-#     j=intervallo+1
-#     varianza.append(np.var(serie[0:intervallo]))
-#     media.append(np.average(serie[0:intervallo]))
-#     print(len(media))
-#     print (len (varianza))
-#     while (j<len(serie)-intervallo):
-#         intesimo=1/intervallo
-#         j+=1
-#         next=j
-#         curr=j-1
-#         zero=(curr-intervallo)
-#         incrmu=(serie[next]-serie[zero])/intervallo
-#         media.append(media[-1]+incrmu)
-#         primofattore=intesimo*(serie[next]-serie[zero])**2
-#         secondofattore=(serie[next]-media[-1])**2
-#         terzofattore=(serie[zero]-media[-1])**2
-#         quartofattore=2*intesimo*(serie[next]-serie[zero]*np.sqrt(np.abs(varianza[-1]))
-#         incrsigma=(primofattore+secondofattore-terzofattore-quartofattore)
-#         varianza.append(varianza[-1]+incrsigma)
-#     for j in range (len(serie)-intervallo,len(serie)-1):
-#         j+=1
-#         intervallo-=1
-#         intesimo=1/intervallo
-#         next=j
-#         curr=j-1
-#         zero=(curr-intervallo)
-#         incrmu=(serie[next]-serie[zero])/intervallo
-#         media.append(media[-1]+incrmu)
-#         primofattore=intesimo*(serie[next]-serie[zero])**2
-#         secondofattore=(serie[next]-media[-1])**2
-#         terzofattore=(serie[zero]-media[-1])**2
-#         quartofattore=2*intesimo*(serie[next]-serie[zero]*np.sqrt(varianza[-1]))
-#         incrsigma=(primofattore+secondofattore-terzofattore-quartofattore)
-#         varianza.append(varianza[-1]+incrsigma)
-#     return (np.sqrt(varianza))
+def terzottava(segnale, centrobanda):
+    #centeroctave=1000*2.**(np.arange(-7,7))
+    sampling=44100
+    filtrato=ac.octavepass(center=centrobanda, fs=sampling, fraction=3, signal=segnale, order=8)
+    return (filtrato)
 
 def plottamediamobile(wav,campioni):
     mediamobile=rollingavg(wav,campioni)
@@ -177,7 +155,7 @@ def plottaserietemporale(serie,campionamento):
     plt.plot(xaxis,serie,label='Pressione [RMS]')
     plt.xlabel('Time [s]')
     plt.xlim(min(xaxis),max(xaxis))
-    plt.legend()
+    plt.legend(loc='upper right')
 
 def plottaspettrogramma(serie, N, sampling):
     specgramma=plt.specgram(serie,Fs=sampling, window=wind, scale='dB', NFFT=N, cmap='jet')
@@ -217,22 +195,25 @@ def rollinghole (sample, sampling, width):
     ratio=np.divide(mean[100:],sigma[:-100])
     return (np.array(ratio.tolist()+np.zeros(200).tolist()))
 
-#Fa la trasformata di wavelet suddividendo gli intervalli di frequenze in nlogbin, da migliorare.
+#Fa la trasformata di wavelet suddividendo gli intervalli di frequenze in nlogbin, da migliorare. Notare che le etichette sulle y fanno schifo, sono 4 punti presi all'interno dell'intervallo e approssimati all'esponenziale più vicino, quindi se vedi 10^3 può essere taggato anche in 2.35*10^3. Modi più intelligenti per fare questa cosa includono lo scegliere i bin logaritmici in modo che vengano particolarmente in accordo con 3 divisioni della scala o scrivere l'asse y in modo non del tutto automatico.
 def wavelet (sig, nlogbin):
     fsampling=44100
+    #logbins=np.logspace(1,4,num=nlogbin)
     #dt=0.01
-    logextent=[1,4]
-    #frequencies = pywt.scale2frequency('cmor1.5-1.0',np.arange(1,nlogbin)) / 0.1
-    widths=np.logspace(logextent[0],logextent[1],num=nlogbin)
+    #frequencies = pywt.scale2frequency('cmor3-1',np.arange(0,nlogbin)) / 0.1
+    #widths=np.logspace(0,4,num=nlogbin)
+    widths=np.logspace(np.log10(fsampling/5000),np.log10(fsampling/10), num=nlogbin)
     cwtmatr, freqs = pywt.cwt(sig, widths, 'cmorl3-1')
+    #logextent=[np.log(4.41),np.log10(4410)]#[np.log10((freqs[-1]+freqs[-2])*44100/2),np.log10((freqs[1]+freqs[0])*44100/2)]
+    extent=[(np.min(1/(widths/44100))), (np.max(1/(widths/44100)))]
+    logextent=np.log10(extent)
     fig, (ax) = plt.subplots()
-    ax.yaxis.set_major_locator(plt.MaxNLocator(4))
-    ax.yaxis.set_major_formatter(fake_log)
-    imm=ax.imshow(np.abs(cwtmatr), aspect='auto', cmap='jet', vmax=abs(cwtmatr).max(), vmin=abs(cwtmatr).min(), extent=[0,len(sig)/fsampling,logextent[0], logextent[1]])  # doctest: +SKIP
-    ax.set_ylabel('frequency [Hz]')
+    ax.yaxis.set_major_locator(plt.MaxNLocator(len(widths)))
+    #ax.yaxis.set_major_formatter(fake_log)
+    imm=ax.imshow(np.abs(cwtmatr), aspect='auto', cmap='jet', vmax=abs(cwtmatr).max(), vmin=abs(cwtmatr).min(), extent=[0,len(sig)/fsampling, logextent[0], logextent[1]]) 
+    ax.set_ylabel('Log frequency')
     ax.set_xlabel('time [s]')
     fig.colorbar(imm)
-    plt.show()
 
 def trigger(segnale, largewindow, smallwindow):
     sampling=44100
@@ -249,6 +230,7 @@ def trigger(segnale, largewindow, smallwindow):
 
 loadir='/home/kibuzo/Rotoliamo/Dati/misura/'
 loadir='/home/kibuzo/Rotoliamo/Topate/tempdata/'
+loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
 
 
 if windows:
@@ -260,41 +242,154 @@ for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
 
+# funzione che marca le buche, restituisce timestamp, rms del segnale, deviazione standard del fondo. richiede segnale, frequenza di sampling e differenza tra il tempo nell'audio e nel video. Achtung: adesso ho messo una roba che toglie l'eccesso di varianza per un po' di sample dopo il trigger
+def markholes(segnale, sampling, centerband, deltat):
+    longroll=math.floor((sampling*25)/centerband)
+    shortroll=math.floor(sampling/(2*centerband))
+    trig=rollingtrig(np.sqrt(segnale**2), longroll, shortroll)
+    #varianza=np.array(trig[2])
+    #varianzaback=np.concatenate((varianza[longroll:],np.zeros(longroll)))
+    z=np.sqrt((trig[0]-trig[1])**2/trig[2])
+    trigUP=z>4
+    #varianza=varianza-(varianza-varianzaback)*trigUP
+    timestamp=[]
+    x=[]
+    mu=[]
+    sigma=[]
+    j=0
+    while (j< len(trig[1])):
+        if (z[j])>4:
+            #if (trig[1][j]>1):
+            #    if (trig[2][j]>1):
+            timestamp.append(j/sampling-deltat)
+            #index=np.where(z==np.max(z[j:j+441]))
+            #x.append(float(trig[0][index]))
+            #mu.append(float(trig[1][index]))
+            #sigma.append(float(trig[2][index]))
+            #sigma.append(varianza[index])
+            #Se il trigger è alto skippa un secondo, per evitare di avere tanti positivi
+            j+=sampling-1
+        j+=1
+    return(timestamp)#,x,mu,np.sqrt(sigma))
 
-# trigger=[]
-# rollinglarge=(rollingavg(prova[1]**2, 10000))
-# rollingsmall=(rollingavg(prova[1]**2, 200)[(10000-200):])
-# for j in (0,len(prova[1])-10200):
-#     trigger.append(rollingsmall[-1]/rollinglarge[-1])
-#     nsec=math.floor(len(rollinglarge[200:-10000])/44100)
-#     nsecutili=math.floor(len(rollingsmall[800:])/44100)
-#     rollinglargeaffettato=rollinglarge[:nsecutili*44100]
-#     rollingsmallaffettato=rollingsmall[:nsecutili*44100]
-#     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
-#     plt.plot(np.linspace(0,len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato)),np.divide(rollingsmallaffettato,rollinglargeaffettato))
-def triplot (segnale,sampling):
-    #Trigger=triggernew(segnale, 10000,200)
-    Mediemobili=rollingtrig(np.sqrt(segnale**2), 10000,200)
+def triplot (segnale,sampling, centerband):
+    longroll=math.floor((sampling*25)/centerband)
+    shortroll=math.floor(sampling/(2*centerband))
+    Mediemobili=rollingtrig(np.sqrt(segnale**2), longroll,shortroll)
+    z=np.sqrt((Mediemobili[0]-Mediemobili[1])**2/Mediemobili[2])
+    # trigUP=np.zeros(len(Mediemobili[2]))
+    # dove=np.where(z>4)
+    # for j in range (0,len(dove[0])):
+    #     trigUP[dove[0][j]-math.floor(0.2*longroll):dove[0][j]+math.floor(1.2*longroll)]=1
+    # print (np.sum(trigUP))
+    # varianza=Mediemobili[2]
+    # varianzaback=np.concatenate((np.zeros(2*longroll),varianza[:-2*longroll]))
+    # varianza=varianza-(varianza-varianzaback)*trigUP
+    # Ritrigger=np.sqrt((Mediemobili[0]-Mediemobili[1])**2/varianza)
     xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
     plt.subplot(311)
     plottaserietemporale(np.sqrt(segnale**2),sampling)
     plt.subplot(312)
     plt.plot(xvec,Mediemobili[0], label='stima puntuale della pressione rms')
     plt.plot(xvec,Mediemobili[1], label='stima del background rms')
+    plt.plot(xvec,np.sqrt(Mediemobili[2]), label='stima della varianza background')
+    #plt.plot(xvec,np.concatenate((np.zeros(1),400*np.diff((Mediemobili[0])))), label='derivata di rms')
+    #plt.plot(varianza-varianzaback, label='bamboo')
     plt.xlim(0, max(xvec))
-    plt.legend()
+    plt.legend(loc='upper left')
     plt.subplot(313)
-    plt.plot(xvec, ((Mediemobili[0]-Mediemobili[1])**2)/Mediemobili[2], label='segnale del trigger')
+    triggers=np.sqrt(((Mediemobili[0]-Mediemobili[1])**2)/Mediemobili[2])
+    plt.plot(xvec, z, label='segnale del trigger')
+    #plt.plot(xvec, Ritrigger, label='segnale del trigger pulito')    
+    print(str(np.sum(triggers>5)) + ' samples triggered')
+    plt.ylim(1,7)
     plt.xlim(0,max(xvec))
-    plt.legend()
+    plt.axhline(y=4,xmin=0, xmax=max(xvec), linestyle='--')
+    plt.legend(loc='upper left')
     plt.show()
-    
 
-prova=loadwav(filelist[0])
+def savecwt(segnale, deltat, savedir, timestamps):
+    for j in range (0, len(timestamps)):
+        intervallo=[math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100)]
+        wavelet(segnale[intervallo[0]:intervallo[1]],20)
+        plt.savefig(savedir+str(int(timestamps[j]))+'_cwt')
+        plt.close()
+
+def savetriplot(segnale, deltat, savedir, timestamps):
+    sampling=44100
+    Mediemobili=rollingtrig(np.sqrt(segnale**2), 10000,200)
+    xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
+    for j in range (0, len(timestamps)):
+        print(timestamps[j])
+        intervallo=(math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100))
+        signal=segnale[intervallo[0]:intervallo[1]]
+        plt.subplot(311)
+        plottaserietemporale(np.sqrt(signal**2),sampling)
+        plt.subplot(312)
+        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[0][intervallo[0]:intervallo[1]], label='pressione rms')
+        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[1][intervallo[0]:intervallo[1]], label='fondo rms')
+        plt.plot(xvec[intervallo[0]:intervallo[1]],np.sqrt(Mediemobili[2][intervallo[0]:intervallo[1]]), label='varianza')
+        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]), max(xvec[intervallo[0]:intervallo[1]]))
+        plt.legend(loc='upper left')
+        plt.subplot(313)
+        plt.plot(xvec[intervallo[0]:intervallo[1]], np.sqrt(((Mediemobili[0][intervallo[0]:intervallo[1]]-Mediemobili[1][intervallo[0]:intervallo[1]])**2)/Mediemobili[2][intervallo[0]:intervallo[1]]), label='trigger')
+        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]),max(xvec[intervallo[0]:intervallo[1]]))
+        #plt.legend(loc='upper left')
+        #plt.show()
+        plt.savefig(savedir+str(int(timestamps[j]))+'_triplot')
+        plt.close()
+
+def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband):
+    sampling=44100
+    Mediemobili=rollingtrig(np.sqrt(ac.octavepass(segnale,centerband, fs=sampling, order=8, fraction=3)**2), math.floor((sampling*25)/centerband),math.floor(sampling/(2*centerband)))
+    xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
+    for j in range (0, len(timestamps)):
+        print(timestamps[j])
+        intervallo=(math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100))
+        signal=segnale[intervallo[0]:intervallo[1]]
+        plt.subplot(311)
+        plottaserietemporale(np.sqrt(signal**2),sampling)
+        plt.subplot(312)
+        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[0][intervallo[0]:intervallo[1]], label='pressione rms')
+        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[1][intervallo[0]:intervallo[1]], label='fondo rms')
+        plt.plot(xvec[intervallo[0]:intervallo[1]],np.sqrt(Mediemobili[2][intervallo[0]:intervallo[1]]), label='varianza')
+        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]), max(xvec[intervallo[0]:intervallo[1]]))
+        plt.legend(loc='upper left')
+        plt.subplot(313)
+        plt.plot(xvec[intervallo[0]:intervallo[1]], np.sqrt(((Mediemobili[0][intervallo[0]:intervallo[1]]-Mediemobili[1][intervallo[0]:intervallo[1]])**2)/Mediemobili[2][intervallo[0]:intervallo[1]]), label='trigger')
+        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]),max(xvec[intervallo[0]:intervallo[1]]))
+        #plt.legend(loc='upper left')
+        #plt.show()
+        plt.savefig(savedir+str(int(timestamps[j]))+'_triplot_resonant')
+        plt.close()
+
+def savetimestamps(dir, vec):
+    vec=np.array(vec)
+    np.savetxt(dir+'Timestamps.txt', vec.astype(int), fmt='%i')
+
+def terzitrigger(segnale, sampling, centerband):
+    trigband=[]
+    sampling=44100
+    #a=np.arange(-19,19)
+    #centerbands=1000*(2**(a/3))
+    #for j in range (0,len(centerbands)):
+    trigband=(markholes(ac.octavepass(prova[1],centerband, fs=sampling, order=8, fraction=3), sampling, centerband, 0))
+    return (trigband)
+
+# plt.plot(np.linspace(0,secondi(len(tagliato)), num=len(tagliato)),PtoLeq(tagliato))
+# plt.show()
+# dove=np.where(z>4)
+# 
+# for j in range (0,len(dove[0])):
+#     trigUP[dove[0][j]:dove[0][j]+longroll]=1
+    
+savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
+savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Triggered/2khz/plot/'
+prova=loadwav(filelist[-1])
 # Triggah=triggernew(prova[1], 10000, 200)
 # s=0.01 #(durata in secondi della finestra mobile)
 # #creo la finestra
-# N=math.floor(prova[0]*s)
+# N=math.floor(44100*s)
 # wind=signal.windows.gaussian(N,round(prova[0]/200))
 # #wind=signal.windows.hann(N)
 # 

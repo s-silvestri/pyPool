@@ -12,7 +12,7 @@ def genwhite (mean, std, seconds):
     return (samples)
 
 def genstradabella(s):
-    return(genwhite(4,4,5))
+    return(genwhite(0,4,s))
 
 # Genera il segnale atteso da una buca che dura seconds secondi, campionato a 44100 Hz
 # Per ora è un segnale sinusoidale con finestra gaussiana senza posibilità di variarlo in intensità o in frequenza, magari più in avanti sarà più raffinato man mano che la nostra conoscenza delle buche migliora
