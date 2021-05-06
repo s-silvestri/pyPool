@@ -57,12 +57,16 @@ def PtoLeq(P):
     P0=2e-5
     return (10*np.log10(P**2/P0**2))
     
-#Funzione sperimentale che prende una serie temporale in pressione, toglie le buche segnate nel vettore buchesecondi assumendo una durata di un secondo centrato nel timestamp e calcola il leq del risultato. L'incertezza sarà calcolata come RMS/sqrt(BT) a cui sommare la varianza dei livelli
+#Funzione sperimentale che prende una serie temporale in pressione, toglie le buche segnate nel vettore buchesecondi assumendo una durata di un secondo centrato nel timestamp e calcola il leq del risultato. L'incertezza sarà calcolata come RMS/sqrt(BT) a cui sommare la varianza dei livelli. Non è che funzioni, per ora
 def meanLeq(serie, buchesecondi,delta):
-    if (buchesecondi):
-        main=serie[0:campioni(math.floor(buchesecondi[0-0.5]))]
+    buchesecondi=np.array(buchesecondi)
+    if (buchesecondi.size>0):
+        main=serie[0:campioni(buchesecondi[0]-0.5)]
         for j in range (1,len(buchesecondi)):
-            main=np.append((main, serie[math.floor(campioni(buchesecondi[j]-0.5)):math.floor(campioni(buchesecondi[j]+0.5))]))
+            main=np.concatenate((main, serie[math.floor(campioni(buchesecondi[j]-0.5)):math.floor(campioni(buchesecondi[j]+0.5))]))
+    else: main=serie
+    RMS=(np.sqrt(np.average((main)**2)))
+    return(PtoLeq(RMS))
  
 #Le seguenti servono per le medie mobili: per la media mobile funziona sia quella di default di pandas sia quella scritta da me che lascio soprattutto per motivi di retrocompatibilità e confronto
 def rollingavgpd(serie, intervallo):
