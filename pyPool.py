@@ -1,4 +1,3 @@
-#ToDo: Stimare la larghezza delle due finestre mobili per il trigger, una per la media fuori buca che deve rimanere tale anche dentro la buca (quindi 10 volte più larga della tipica buca) e una che è una correzione della media puntuale anche dentro la buca, quindi più stretta. La varianza andrebbe fatta fuori buca, quindi sul campione mobile, FAI LA VARIANZA MOBILE.
 #Achtung: le tue medie mobili sembrano produrre in uscita vettori che sono lunghi almeno 2 volte la lunghezza della finestra, il che credo che abbia senso ma non ho tempo di controllarlo, nel dubbio usalo solo su vettori lunghi
 from scipy.io.wavfile import read
 from scipy.signal import spectrogram
@@ -13,64 +12,53 @@ from time import time
 from matplotlib.colors import LogNorm
 import pandas as pd
 import scipy as sp
-#detection centrata nella buca con mezzo secondo di dati
-#dovrai usare pywt.cwt()
 windows=False
 
+#---------------------- Qui ci sono un po' di indirizzi di cartelle da cui volendo si caricano facilmente i file: ognuno le aggiorni con le sue folder preferite, idealmente tutti i file sono in una cartella poi vengono caricate in un vettore filelist[].
+loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
+
+savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
+savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Triggered/2khz/plot/'
+prova=loadwav(filelist[-1])
+
+
+if windows:
+    loadir='C:/Users/acust/Desktop/misura/Longnavacchio/'
+    savedir='c:/Users/acust/Desktop/misura/processed'
+
+#Questo mette tutti i nomi dei file in un apposito vettore.
+filelist=[]
+for filename in os.listdir(loadir):
+    if filename.endswith(".wav"):
+        filelist.append(loadir+filename)
+
+#---------------------- Cominciano le funzioni
+
+#Copiato da internet. Usato, e poi abbandonato, per l'asse verticale logaritmico della wavelet: ha diversi problemi, tipo che ti approssima 5x10^23 in 10^23, magari un giorno lo aggiusto
 @plt.FuncFormatter
 def fake_log(x, pos):
     'The two args are the value and tick position'
     return r'$10^{%2d}$' % (x)
-    
+
+#Le prossime funzioni trasformano l'input in secondi nel numero di campioni e viceversa. Da aggiornare se cambia la frequenza di sampling    
 def secondi(campioni):
-    return (campioni/44100)
+    sampling=44100
+    return (campioni/sampling)
     
 def campioni(secondi):
-    return (math.floor(secondi*44100))
+    sampling=44100
+    return (math.floor(secondi*sampling))
 
-def PtoLeq(P):
-    P0=2e-5
-    return (10*np.log10(P**2/P0**2))
-    
-def varianzastupida(set, length):
-    var=[]
-    for j in range (0, len(set)-length):
-        var.append(np.var(set[j:j+length]))
-    return(var)
-    
-def varianzaintelligente(set, length):
-    var=[]
-    media=[]
-    epsilon=[]
-    for j in range (0,length):
-        var.append(np.var(set[0:j]))
-        media.append(np.mean(set[0:j]))
-        epsilon.append(np.abs(np.sum(set[0:j]-media[j])))
-    for j in range (length+1, len(set)-length):
-        media.append((set[j]-set[j-length])/length)
-        epsilon.append(np.abs(np.sum(set[j-length:j]-media[-1])))
-        var.append(1)
-    return(epsilon)
-
-#loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica
-def derivata(serie):
-    der=[]
-    der.append(serie[1]-serie[0])
-    for j in range (1, len(serie)-1):
-        der.append(serie[j+1]-serie[j])
-    return (np.array(der))
-
+#loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
     samplerate, data = read(file)
     return (samplerate, data*813.5330/32767) # quel numerino è per la calibrazione del sensore audio
 
-#La vecchia media mobile: lenta ma testata
-def moveaverag(serie, intervallo):
-    a=[]
-    for j in range (0,len(serie)-intervallo):
-        a.append(np.average(serie[j:j+intervallo]))
-    return(a)
-
+def PtoLeq(P):
+    P0=2e-5
+    return (10*np.log10(P**2/P0**2))
+ 
+#Le seguenti servono per le medie mobili: per la media mobile funziona sia quella di default di pandas sia quella scritta da me che lascio soprattutto per motivi di retrocompatibilità e confronto
 def rollingavgpd(serie, intervallo):
     pdserie=pd.Series(serie)
     avg=pdserie.rolling(intervallo).mean()
@@ -120,23 +108,13 @@ def rollingavgnonzero(serie, intervallo, media200):
             a.append(a[-1])
     return(a)
 
+#La più abusata (con pandas) fino a maggio: restituisce medie mobili a pochi e tanti campioni, varianza su tanti campioni. Il trigger si calcola banalmente da x-mu/sigma.
 def rollingtrig(serie, lungo, corto):
     seriepd=pd.Series(serie)
     largemean=seriepd.rolling(lungo).median()
     largevar=seriepd.rolling(lungo).var()
     smallmean=seriepd.rolling(corto).median()
     return (smallmean.to_numpy(), largemean.to_numpy(), largevar.to_numpy())
-
-def rollingstd(serie, intervallo):
-    a=[]
-    j=intervallo+1
-    a.append(np.std(serie[0:intervallo]))
-    while (j<len(serie)-intervallo):
-        j+=1
-        a.append(np.std(serie[j:j+intervallo]))
-    for j in range (len(serie)-intervallo,len(serie)):
-        a.append(np.average(serie[j:len(serie)]))
-    return(a)
 
 def terzottava(segnale, centrobanda):
     #centeroctave=1000*2.**(np.arange(-7,7))
@@ -164,47 +142,11 @@ def plottaspettrogramma(serie, N, sampling):
     plt.xlabel('Time [sec]')
     return (specgramma)
 
-def triggerold (sample, width, thresh):
-    tic=time()
-    for j in range (0,len(sample)-width):
-        Trigger=0
-        if(np.average(sample[j:j+width]**2)>thresh):
-            Trigger=1
-            break
-    toc=time()
-    print ('Tempo di esecuzione per ' + str(j) + ' cicli di esecuzione del trigger= ' + str(toc-tic)+ ' s')
-    print ('Tempo medio di calcolo del trigger: ' + str(1e6*(toc-tic)/j) + ' us')
-    return (Trigger,j)
-
-def filtrabuca (sample, sampling):
-    Where=triggerold(sample, 4410, 1000)
-    buca=[]
-    if (Where[0]>0):
-        estremi=[Where[1]-math.floor(sampling/2), Where[1]+math.floor(sampling/2)]
-        buca=sample[estremi[0]:estremi[1]]*signal.windows.hann(sampling)
-    return (buca)
-
-
-def rollinghole (sample, sampling, width):
-    mean=rollingavg(sample**2,width)
-    sigma=rollingstd(mean,1*width)
-    #zeropad sigma
-    sigma=np.array(sigma+np.zeros(len(mean)-len(sigma)).tolist())
-    #print(len(mean))
-    #print (len(sigma))
-    ratio=np.divide(mean[100:],sigma[:-100])
-    return (np.array(ratio.tolist()+np.zeros(200).tolist()))
-
-#Fa la trasformata di wavelet suddividendo gli intervalli di frequenze in nlogbin, da migliorare. Notare che le etichette sulle y fanno schifo, sono 4 punti presi all'interno dell'intervallo e approssimati all'esponenziale più vicino, quindi se vedi 10^3 può essere taggato anche in 2.35*10^3. Modi più intelligenti per fare questa cosa includono lo scegliere i bin logaritmici in modo che vengano particolarmente in accordo con 3 divisioni della scala o scrivere l'asse y in modo non del tutto automatico.
+#Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
 def wavelet (sig, nlogbin):
     fsampling=44100
-    #logbins=np.logspace(1,4,num=nlogbin)
-    #dt=0.01
-    #frequencies = pywt.scale2frequency('cmor3-1',np.arange(0,nlogbin)) / 0.1
-    #widths=np.logspace(0,4,num=nlogbin)
     widths=np.logspace(np.log10(fsampling/5000),np.log10(fsampling/10), num=nlogbin)
     cwtmatr, freqs = pywt.cwt(sig, widths, 'cmorl3-1')
-    #logextent=[np.log(4.41),np.log10(4410)]#[np.log10((freqs[-1]+freqs[-2])*44100/2),np.log10((freqs[1]+freqs[0])*44100/2)]
     extent=[(np.min(1/(widths/44100))), (np.max(1/(widths/44100)))]
     logextent=np.log10(extent)
     fig, (ax) = plt.subplots()
@@ -215,32 +157,16 @@ def wavelet (sig, nlogbin):
     ax.set_xlabel('time [s]')
     fig.colorbar(imm)
 
-def trigger(segnale, largewindow, smallwindow):
-    sampling=44100
-    rollingsmall=(rollingavg(np.sqrt(segnale**2), 200)) #[(largewindow-smallwindow):])
-    rollinglarge=(rollingavgnonzero(np.sqrt(segnale**2), 10000, rollingsmall))
-    nsecutili=math.floor(len(rollingsmall)/sampling)#[:-(largewindow-smallwindow)])/sampling)
-    rollinglargeaffettato=rollinglarge[:nsecutili*sampling]
-    rollingsmallaffettato=rollingsmall[:nsecutili*sampling]
-    trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
-    xtime=np.linspace(0, len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato))
-    return(xtime, trigger, rollingsmallaffettato, rollinglargeaffettato)
-    
-
-
-loadir='/home/kibuzo/Rotoliamo/Dati/misura/'
-loadir='/home/kibuzo/Rotoliamo/Topate/tempdata/'
-loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
-
-
-if windows:
-    loadir='C:/Users/acust/Desktop/misura/Longnavacchio/'
-    savedir='c:/Users/acust/Desktop/misura/processed'
-
-filelist=[]
-for filename in os.listdir(loadir):
-    if filename.endswith(".wav"):
-        filelist.append(loadir+filename)
+# def trigger(segnale, largewindow, smallwindow):
+#     sampling=44100
+#     rollingsmall=(rollingavg(np.sqrt(segnale**2), 200)) #[(largewindow-smallwindow):])
+#     rollinglarge=(rollingavgnonzero(np.sqrt(segnale**2), 10000, rollingsmall))
+#     nsecutili=math.floor(len(rollingsmall)/sampling)#[:-(largewindow-smallwindow)])/sampling)
+#     rollinglargeaffettato=rollinglarge[:nsecutili*sampling]
+#     rollingsmallaffettato=rollingsmall[:nsecutili*sampling]
+#     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
+#     xtime=np.linspace(0, len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato))
+#     return(xtime, trigger, rollingsmallaffettato, rollinglargeaffettato)
 
 # funzione che marca le buche, restituisce timestamp, rms del segnale, deviazione standard del fondo. richiede segnale, frequenza di sampling e differenza tra il tempo nell'audio e nel video. Achtung: adesso ho messo una roba che toglie l'eccesso di varianza per un po' di sample dopo il trigger
 def markholes(segnale, sampling, centerband, deltat):
@@ -272,6 +198,7 @@ def markholes(segnale, sampling, centerband, deltat):
         j+=1
     return(timestamp)#,x,mu,np.sqrt(sigma))
 
+#Questo fa 3 plot utili impilati verticalmente del segnale in pressione dato in input. Ormai dà per scontato che il segnale sia una banda in terzi d'ottava centrata in centerband
 def triplot (segnale,sampling, centerband):
     longroll=math.floor((sampling*25)/centerband)
     shortroll=math.floor(sampling/(2*centerband))
@@ -308,6 +235,7 @@ def triplot (segnale,sampling, centerband):
     plt.legend(loc='upper left')
     plt.show()
 
+#------------- Qui cominciano le funzioni che salvano automaticamente i file nella cartella savedir
 def savecwt(segnale, deltat, savedir, timestamps):
     for j in range (0, len(timestamps)):
         intervallo=[math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100)]
@@ -376,6 +304,12 @@ def terzitrigger(segnale, sampling, centerband):
     trigband=(markholes(ac.octavepass(prova[1],centerband, fs=sampling, order=8, fraction=3), sampling, centerband, 0))
     return (trigband)
 
+#Crea una finestra di hann, perché a tutti piace averne una sempre a disposizione
+N=math.floor(44100*s)
+wind=signal.windows.hann(N)
+#O gaussiana se vuoi
+#wind=signal.windows.gaussian(N,round(44100/200))
+
 # plt.plot(np.linspace(0,secondi(len(tagliato)), num=len(tagliato)),PtoLeq(tagliato))
 # plt.show()
 # dove=np.where(z>4)
@@ -383,14 +317,9 @@ def terzitrigger(segnale, sampling, centerband):
 # for j in range (0,len(dove[0])):
 #     trigUP[dove[0][j]:dove[0][j]+longroll]=1
     
-savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
-savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Triggered/2khz/plot/'
-prova=loadwav(filelist[-1])
 # Triggah=triggernew(prova[1], 10000, 200)
 # s=0.01 #(durata in secondi della finestra mobile)
 # #creo la finestra
-# N=math.floor(44100*s)
-# wind=signal.windows.gaussian(N,round(prova[0]/200))
 # #wind=signal.windows.hann(N)
 # 
 # plt.subplot(313)
@@ -398,10 +327,3 @@ prova=loadwav(filelist[-1])
 # 
 # plt.subplot(312)
 # plottaserietemporale(np.sqrt(prova[1]**2),prova[0])
-# 
-# 
-# plt.subplot (311)
-# plt.plot(Triggah[0],Triggah[2], label='stima puntuale della pressione rms')
-# plt.plot(Triggah[0],Triggah[3], label='stima del background rms')
-# plt.legend()
-# plt.show()
