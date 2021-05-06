@@ -12,14 +12,17 @@ from time import time
 from matplotlib.colors import LogNorm
 import pandas as pd
 import scipy as sp
-windows=False
+windows=True
+#loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
+def loadwav(file):
+    samplerate, data = read(file)
+    return (samplerate, data*813.5330/32767) # quel numerino è per la calibrazione del sensore audio
 
 #---------------------- Qui ci sono un po' di indirizzi di cartelle da cui volendo si caricano facilmente i file: ognuno le aggiorni con le sue folder preferite, idealmente tutti i file sono in una cartella poi vengono caricate in un vettore filelist[].
 loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
 
 savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
 savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Triggered/2khz/plot/'
-prova=loadwav(filelist[-1])
 
 
 if windows:
@@ -31,6 +34,7 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
+prova=loadwav(filelist[-1])
 
 #---------------------- Cominciano le funzioni
 
@@ -49,14 +53,16 @@ def campioni(secondi):
     sampling=44100
     return (math.floor(secondi*sampling))
 
-#loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
-def loadwav(file):
-    samplerate, data = read(file)
-    return (samplerate, data*813.5330/32767) # quel numerino è per la calibrazione del sensore audio
-
 def PtoLeq(P):
     P0=2e-5
     return (10*np.log10(P**2/P0**2))
+    
+#Funzione sperimentale che prende una serie temporale in pressione, toglie le buche segnate nel vettore buchesecondi assumendo una durata di un secondo centrato nel timestamp e calcola il leq del risultato. L'incertezza sarà calcolata come RMS/sqrt(BT) a cui sommare la varianza dei livelli
+def meanLeq(serie, buchesecondi,delta):
+    if (buchesecondi):
+        main=serie[0:campioni(math.floor(buchesecondi[0-0.5]))]
+        for j in range (1,len(buchesecondi)):
+            main=np.append((main, serie[math.floor(campioni(buchesecondi[j]-0.5)):math.floor(campioni(buchesecondi[j]+0.5))]))
  
 #Le seguenti servono per le medie mobili: per la media mobile funziona sia quella di default di pandas sia quella scritta da me che lascio soprattutto per motivi di retrocompatibilità e confronto
 def rollingavgpd(serie, intervallo):
@@ -305,6 +311,7 @@ def terzitrigger(segnale, sampling, centerband):
     return (trigband)
 
 #Crea una finestra di hann, perché a tutti piace averne una sempre a disposizione
+s=0.01
 N=math.floor(44100*s)
 wind=signal.windows.hann(N)
 #O gaussiana se vuoi
