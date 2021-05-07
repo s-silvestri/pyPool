@@ -26,15 +26,15 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 
 if windows:
-    loadir='C:/Users/acust/Desktop/misura/Longnavacchio/'
-    savedir='c:/Users/acust/Desktop/misura/processed'
+    loadir='C:/Users/acust/Desktop/misura/Long/'
+    savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
 filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[-1])
+prova=loadwav(filelist[0])
 
 #---------------------- Cominciano le funzioni
 
@@ -57,16 +57,64 @@ def PtoLeq(P):
     P0=2e-5
     return (10*np.log10(P**2/P0**2))
     
-#Funzione sperimentale che prende una serie temporale in pressione, toglie le buche segnate nel vettore buchesecondi assumendo una durata di un secondo centrato nel timestamp e calcola il leq del risultato. L'incertezza sarà calcolata come RMS/sqrt(BT) a cui sommare la varianza dei livelli. Non è che funzioni, per ora
-def meanLeq(serie, buchesecondi,delta):
-    buchesecondi=np.array(buchesecondi)
-    if (buchesecondi.size>0):
-        main=serie[0:campioni(buchesecondi[0]-0.5)]
-        for j in range (1,len(buchesecondi)):
-            main=np.concatenate((main, serie[math.floor(campioni(buchesecondi[j]-0.5)):math.floor(campioni(buchesecondi[j]+0.5))]))
-    else: main=serie
-    RMS=(np.sqrt(np.average((main)**2)))
-    return(PtoLeq(RMS))
+#prendo tutto in secondi, per ora assumo comportamento virtuoso dell'operatore, cioè le buche non devono essere sul bordo (intervallo di mezzo secondo), né fuori. Metti anche un check sulle buche, se mi passa un array vuoto non devo fare niente.
+def toglibuche(serie, inizio, fine, buche):
+    xvec=np.linspace(inizio,fine,num=math.floor((fine-inizio)*44100))
+    if np.array(buche).size==0:
+        return(xvec, serie)
+    buche=np.array(buche)
+    serie=serie[campioni(inizio):campioni(fine)]
+    buche=buche-inizio
+    #aggiungere un controllo su buca prima di inizio serie
+    senzabuche=serie[0:campioni(buche[0]-0.5)]
+    xtime=xvec[0:campioni(buche[0]-0.5)]
+    print(len(senzabuche))
+    print(len(xtime))
+    for j in range (1,len(buche)):
+        #Il segnale buono sta tra inf e sup, mentre le buca  tra sup e sup+1sec e tra inf e inf-1sec
+        inf=buche[j-1]+0.5
+        sup=buche[j]-0.5
+        infC=campioni(inf)
+        supC=campioni(sup)
+        senzabuche=np.concatenate((senzabuche,serie[infC:supC]))
+        print ('removing hole number ' + str(j+1) + ' at second '+ str(inf+0.5))
+        xtime=np.concatenate((xtime,xvec[infC:supC]))
+    inf=buche[-1]+1
+    infC=campioni(inf)
+    supC=campioni(fine)
+    senzabuche=np.concatenate((senzabuche,serie[infC:]))
+    xtime=np.concatenate((xtime,xvec[infC:]))
+    print ('Returned vectors in form of (time, signal), the second is hole-free')
+    return(xtime,senzabuche)
+    
+#Funzione sperimentale che prende una serie temporale in pressione, toglie le buche segnate nel vettore buchesecondi assumendo una durata di un secondo centrato nel timestamp e calcola il leq del risultato. L'incertezza sarà calcolata come RMS/sqrt(BT) a cui sommare la varianza dei livelli, al momento il primo contributo l'ho tolto. 
+def meanLeq(serie, bandwidth):
+    #La dimensione del campione è idealmente almeno un decimo di secondo, ma voglio almeno 30 campioni in tutto
+    samplesize=math.floor(np.minimum(len(serie)/30, 441))
+    #RMS=(np.sqrt(np.average((serie)**2)))
+    #gli intervalli partono da 0 e arrivano a tutta la dimensione del campione, in step samplesize
+    rms=[]
+    j=0
+    while j<len(serie)-samplesize:
+        j+=samplesize
+        rms.append(np.sqrt(np.mean(serie[j:j+samplesize]**2)))
+    # for j in range (0, len(intervals)):
+    #     rms.append(np.sqrt(np.sum(serie[j:j+samplesize]**2)))
+    print (j/samplesize)
+    rms=np.array(rms)
+    #sigma2=RMS/(np.sqrt(bandwidth*secondi(len(serie))))
+    sigma= np.sqrt(np.var(rms))
+    RMS=np.median(rms)
+    RMSup=RMS+sigma
+    RMSdown=RMS-sigma
+    return(PtoLeq(RMS), PtoLeq(RMSup), PtoLeq(RMSdown))
+    
+#calcola il leq e gli intervalli di confidenza per una strada con buche a cui toglie le buche
+def calcoleq(strada, intervallo):
+    strada=strada[campioni(intervallo[0]):campioni(intervallo[1])]
+    trigger=markholes(ac.octavepass(center=40, fs=44100, fraction=3, signal=strada, order=8), 44100, 40, 0)
+    sbucato=toglibuche(strada, 0, secondi(len(strada)), trigger)
+    return (meanLeq(sbucato[1], 10))
  
 #Le seguenti servono per le medie mobili: per la media mobile funziona sia quella di default di pandas sia quella scritta da me che lascio soprattutto per motivi di retrocompatibilità e confronto
 def rollingavgpd(serie, intervallo):
@@ -166,17 +214,6 @@ def wavelet (sig, nlogbin):
     ax.set_ylabel('Log frequency')
     ax.set_xlabel('time [s]')
     fig.colorbar(imm)
-
-# def trigger(segnale, largewindow, smallwindow):
-#     sampling=44100
-#     rollingsmall=(rollingavg(np.sqrt(segnale**2), 200)) #[(largewindow-smallwindow):])
-#     rollinglarge=(rollingavgnonzero(np.sqrt(segnale**2), 10000, rollingsmall))
-#     nsecutili=math.floor(len(rollingsmall)/sampling)#[:-(largewindow-smallwindow)])/sampling)
-#     rollinglargeaffettato=rollinglarge[:nsecutili*sampling]
-#     rollingsmallaffettato=rollingsmall[:nsecutili*sampling]
-#     trigger=np.divide(rollingsmallaffettato,rollinglargeaffettato)
-#     xtime=np.linspace(0, len(rollinglargeaffettato)/44100, num=len(rollinglargeaffettato))
-#     return(xtime, trigger, rollingsmallaffettato, rollinglargeaffettato)
 
 # funzione che marca le buche, restituisce timestamp, rms del segnale, deviazione standard del fondo. richiede segnale, frequenza di sampling e differenza tra il tempo nell'audio e nel video. Achtung: adesso ho messo una roba che toglie l'eccesso di varianza per un po' di sample dopo il trigger
 def markholes(segnale, sampling, centerband, deltat):
@@ -318,6 +355,11 @@ def terzitrigger(segnale, sampling, centerband):
 s=0.01
 N=math.floor(44100*s)
 wind=signal.windows.hann(N)
+
+a=[]
+for j in 0,len(runbelle):
+    print (j)
+    a.append(calcoleq(prova[1], runbelle[j]))
 #O gaussiana se vuoi
 #wind=signal.windows.gaussian(N,round(44100/200))
 
