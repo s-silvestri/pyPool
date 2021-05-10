@@ -12,7 +12,8 @@ from time import time
 from matplotlib.colors import LogNorm
 import pandas as pd
 import scipy as sp
-windows=True
+import scipy.fftpack
+windows=False
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
     samplerate, data = read(file)
@@ -68,8 +69,8 @@ def toglibuche(serie, inizio, fine, buche):
     #aggiungere un controllo su buca prima di inizio serie
     senzabuche=serie[0:campioni(buche[0]-0.5)]
     xtime=xvec[0:campioni(buche[0]-0.5)]
-    print(len(senzabuche))
-    print(len(xtime))
+    #print(len(senzabuche))
+    #print(len(xtime))
     for j in range (1,len(buche)):
         #Il segnale buono sta tra inf e sup, mentre le buca  tra sup e sup+1sec e tra inf e inf-1sec
         inf=buche[j-1]+0.5
@@ -77,7 +78,7 @@ def toglibuche(serie, inizio, fine, buche):
         infC=campioni(inf)
         supC=campioni(sup)
         senzabuche=np.concatenate((senzabuche,serie[infC:supC]))
-        print ('removing hole number ' + str(j+1) + ' at second '+ str(inf+0.5))
+        print ('removing hole number at second '+ str(inf+0.5))
         xtime=np.concatenate((xtime,xvec[infC:supC]))
     inf=buche[-1]+1
     infC=campioni(inf)
@@ -100,7 +101,7 @@ def meanLeq(serie, bandwidth):
         rms.append(np.sqrt(np.mean(serie[j:j+samplesize]**2)))
     # for j in range (0, len(intervals)):
     #     rms.append(np.sqrt(np.sum(serie[j:j+samplesize]**2)))
-    print (j/samplesize)
+    #print (j/samplesize)
     rms=np.array(rms)
     #sigma2=RMS/(np.sqrt(bandwidth*secondi(len(serie))))
     sigma= np.sqrt(np.var(rms))
@@ -115,6 +116,13 @@ def calcoleq(strada, intervallo):
     trigger=markholes(ac.octavepass(center=40, fs=44100, fraction=3, signal=strada, order=8), 44100, 40, 0)
     sbucato=toglibuche(strada, 0, secondi(len(strada)), trigger)
     return (meanLeq(sbucato[1], 10))
+
+def sbucastrada(strada,intervallo):
+    strada=strada[campioni(intervallo[0]):campioni(intervallo[1])]
+    trigger=markholes(ac.octavepass(center=40, fs=44100, fraction=3, signal=strada, order=8), 44100, 40, 0)
+    sbucato=toglibuche(strada, 0, secondi(len(strada)), trigger)
+    return(sbucato)
+    
  
 #Le seguenti servono per le medie mobili: per la media mobile funziona sia quella di default di pandas sia quella scritta da me che lascio soprattutto per motivi di retrocompatibilità e confronto
 def rollingavgpd(serie, intervallo):
@@ -199,6 +207,40 @@ def plottaspettrogramma(serie, N, sampling):
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('Time [sec]')
     return (specgramma)
+
+def plottaspettro(data):
+    sampling=44100
+    # Number of samplepoints
+    N = len(data)
+    # sample spacing
+    T = 1.0 / sampling
+    x = np.linspace(0.0, float(N/sampling), num=N)
+    #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
+    yf = scipy.fftpack.fft(data)
+    xf = np.linspace(0.0, 1.0/(2.0*T), math.floor(N/2))
+    fig, ax = plt.subplots()
+    ax.plot(xf, 2.0/N * np.abs(yf[:N//2]))
+    plt.xlim(-100,5000)
+    plt.xlabel('Frequency[Hz]')
+    plt.show()
+
+def plottaspettrosbucato(data,intervallo):
+    sampling=44100
+    intervallo=np.array(intervallo)
+    data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
+    # Number of samplepoints
+    N = len(data)
+    # sample spacing
+    T = 1.0 / sampling
+    x = np.linspace(0.0, float(N/sampling), num=N)
+    #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
+    yf = scipy.fftpack.fft(data)
+    xf = np.linspace(0.0, 1.0/(2.0*T), math.floor(N/2))
+    fig, ax = plt.subplots()
+    ax.plot(xf, 2.0/N * np.abs(yf[:N//2]))
+    plt.xlim(-100,5000)
+    plt.xlabel('Frequency[Hz]')
+    plt.show()
 
 #Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
 def wavelet (sig, nlogbin):
@@ -356,10 +398,32 @@ s=0.01
 N=math.floor(44100*s)
 wind=signal.windows.hann(N)
 
-a=[]
-for j in 0,len(runbelle):
-    print (j)
-    a.append(calcoleq(prova[1], runbelle[j]))
+#runbelle è un vettore di intervalli (inizio, fine) scritto in secondi di asfalto bello, per ora carica solo i dati di coltano e non accetta parametri in input, ma magari un giorno può diventare qualcosa
+def LeqSezioni():
+    runbelle=np.loadtxt(loadir+'runbelle_coltano.txt')
+    runmedie=np.loadtxt(loadir+'runmedie_coltano.txt')
+    runbrutte=np.loadtxt(loadir+'runbrutte_coltano.txt')
+    a=[]
+    for i in range (0,len(runbelle)):
+        print (i)
+        a.append(calcoleq(prova[1], runbelle[i]))
+    a=np.array(a)
+    b=[]
+    for i in range (0,len(runmedie)):
+        print (i)
+        b.append(calcoleq(prova[1], runmedie[i]))
+    b=np.array(b)
+    c=[]
+    for i in range (0,len(runbrutte)):
+        print (i)
+        c.append(calcoleq(prova[1], runbrutte[i]))
+    c=np.array(c)
+    return(a,b,c)
+
+# Plot overload example:
+# for j in range (0,len(runbelle)):
+#     plottaspettrosbucato(prova[1],(runbelle[j][0],runbelle[j][1]))
+
 #O gaussiana se vuoi
 #wind=signal.windows.gaussian(N,round(44100/200))
 
@@ -372,7 +436,7 @@ for j in 0,len(runbelle):
     
 # Triggah=triggernew(prova[1], 10000, 200)
 # s=0.01 #(durata in secondi della finestra mobile)
-# #creo la finestra
+# #creo la finestra' + str(j+1) + '' + str(j+1) + '
 # #wind=signal.windows.hann(N)
 # 
 # plt.subplot(313)
