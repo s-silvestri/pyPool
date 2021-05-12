@@ -13,6 +13,7 @@ from matplotlib.colors import LogNorm
 import pandas as pd
 import scipy as sp
 import scipy.fftpack
+from spectrum import *
 windows=False
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -67,6 +68,10 @@ def toglibuche(serie, inizio, fine, buche):
     serie=serie[campioni(inizio):campioni(fine)]
     buche=buche-inizio
     #aggiungere un controllo su buca prima di inizio serie
+    s=(buche[0]-0.5)
+    N=math.floor(44100*s)
+    #wind=signal.windows.hann(N)
+    wind=1
     senzabuche=serie[0:campioni(buche[0]-0.5)]
     xtime=xvec[0:campioni(buche[0]-0.5)]
     #print(len(senzabuche))
@@ -77,7 +82,11 @@ def toglibuche(serie, inizio, fine, buche):
         sup=buche[j]-0.5
         infC=campioni(inf)
         supC=campioni(sup)
-        senzabuche=np.concatenate((senzabuche,serie[infC:supC]))
+        s=sup-inf
+        #wind=signal.windows.hann(N)
+        wind=1
+        N=math.floor(44100*s)
+        senzabuche=np.concatenate((senzabuche,serie[infC:supC]*wind))
         print ('removing hole number at second '+ str(inf+0.5))
         xtime=np.concatenate((xtime,xvec[infC:supC]))
     inf=buche[-1]+1
@@ -237,10 +246,53 @@ def plottaspettrosbucato(data,intervallo):
     yf = scipy.fftpack.fft(data)
     xf = np.linspace(0.0, 1.0/(2.0*T), math.floor(N/2))
     fig, ax = plt.subplots()
-    ax.plot(xf, 2.0/N * np.abs(yf[:N//2]))
-    plt.xlim(-100,5000)
+    ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
+    plt.xlim(100,5000)
     plt.xlabel('Frequency[Hz]')
     plt.show()
+
+def plottapsdsbucata(data,intervallo):
+    sampling=44100
+    intervallo=np.array(intervallo)
+    data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
+    # Number of samplepoints
+    N = len(data)
+    # sample spacing
+    #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
+    #fig, ax = plt.subplots()
+    plt.psd(data, NFFT=math.floor(len(data)/16), Fs=44100, detrend=None)
+    plt.xscale('log')
+    #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
+    plt.xlim(100,12800)
+    plt.xlabel('Frequency[Hz]')
+    plt.show()
+    
+def plottarmapsdsbucata(data,intervallo):
+    sampling=44100
+    intervallo=np.array(intervallo)
+    data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
+    N = len(data)
+    p = parma(data, 120, 120, 240, NFFT=len(data), sampling=44100)
+    #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
+    p()
+    p.plot(sides='centerdc')
+    plt.xscale('log')
+    plt.xlim(100,15000)
+    plt.show()
+
+def plottayule(data,intervallo):
+    sampling=44100
+    intervallo=np.array(intervallo)
+    data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
+    N = len(data)
+    p = pyule(data, 500, NFFT=len(data), sampling=44100)
+    #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
+    p()
+    p.plot(sides='centerdc')
+    plt.xscale('log')
+    plt.xlim(100,12800)
+    #plt.show()
+    
 
 #Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
 def wavelet (sig, nlogbin):
