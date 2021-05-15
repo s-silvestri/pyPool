@@ -14,6 +14,10 @@ import pandas as pd
 import scipy as sp
 import scipy.fftpack
 from spectrum import *
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import plot_confusion_matrix
+from sklearn.metrics import classification_report
+import seaborn as sn
 windows=False
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -24,7 +28,8 @@ def loadwav(file):
 loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
 
 savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
-savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Triggered/2khz/plot/'
+savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Untriggered/Gronchi/'
+
 
 
 if windows:
@@ -260,32 +265,23 @@ def plottapsdsbucata(data,intervallo):
     # sample spacing
     #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
     #fig, ax = plt.subplots()
-    plt.psd(data, NFFT=math.floor(len(data)/16), Fs=44100, detrend=None)
+    N=8192
+    plt.psd(data, NFFT=N, Fs=44100, detrend=None)
     plt.xscale('log')
     #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
     plt.xlim(100,12800)
     plt.xlabel('Frequency[Hz]')
     plt.show()
     
-def plottarmapsdsbucata(data,intervallo):
-    sampling=44100
-    intervallo=np.array(intervallo)
-    data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
-    N = len(data)
-    p = parma(data, 120, 120, 240, NFFT=len(data), sampling=44100)
-    #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
-    p()
-    p.plot(sides='centerdc')
-    plt.xscale('log')
-    plt.xlim(100,15000)
-    plt.show()
 
 def plottayule(data,intervallo):
     sampling=44100
     intervallo=np.array(intervallo)
-    data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
-    N = len(data)
-    p = pyule(data, 500, NFFT=len(data), sampling=44100)
+    #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
+    data=data[campioni(intervallo[0]):campioni(intervallo[1])]
+    N = 8192
+    order=500
+    p = pyule(data, order, NFFT=N, sampling=44100)
     #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
     p()
     p.plot(sides='centerdc')
@@ -311,13 +307,14 @@ def wavelet (sig, nlogbin):
 
 # funzione che marca le buche, restituisce timestamp, rms del segnale, deviazione standard del fondo. richiede segnale, frequenza di sampling e differenza tra il tempo nell'audio e nel video. Achtung: adesso ho messo una roba che toglie l'eccesso di varianza per un po' di sample dopo il trigger
 def markholes(segnale, sampling, centerband, deltat):
+    soglia=3
     longroll=math.floor((sampling*25)/centerband)
     shortroll=math.floor(sampling/(2*centerband))
     trig=rollingtrig(np.sqrt(segnale**2), longroll, shortroll)
     #varianza=np.array(trig[2])
     #varianzaback=np.concatenate((varianza[longroll:],np.zeros(longroll)))
     z=np.sqrt((trig[0]-trig[1])**2/trig[2])
-    trigUP=z>4
+    trigUP=z>soglia
     #varianza=varianza-(varianza-varianzaback)*trigUP
     timestamp=[]
     x=[]
@@ -325,7 +322,7 @@ def markholes(segnale, sampling, centerband, deltat):
     sigma=[]
     j=0
     while (j< len(trig[1])):
-        if (z[j])>4:
+        if (z[j])>soglia:
             #if (trig[1][j]>1):
             #    if (trig[2][j]>1):
             timestamp.append(j/sampling-deltat)
@@ -379,9 +376,16 @@ def triplot (segnale,sampling, centerband):
 #------------- Qui cominciano le funzioni che salvano automaticamente i file nella cartella savedir
 def savecwt(segnale, deltat, savedir, timestamps):
     for j in range (0, len(timestamps)):
-        intervallo=[math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100)]
+        intervallo=[campioni((timestamps[j]+deltat-1)),campioni((timestamps[j]+deltat+1))]
         wavelet(segnale[intervallo[0]:intervallo[1]],20)
         plt.savefig(savedir+str(int(timestamps[j]))+'_cwt')
+        plt.close()
+
+def saveyw(segnale, deltat, savedir, timestamps):
+    for j in range (0, len(timestamps)):
+        intervallo=((timestamps[j]+deltat-1),(timestamps[j]+deltat+1))
+        plottayule(segnale,(intervallo[0],intervallo[1]))
+        plt.savefig(savedir+str(int(timestamps[j]))+'_YW_psd')
         plt.close()
 
 def savetriplot(segnale, deltat, savedir, timestamps):
@@ -471,7 +475,31 @@ def LeqSezioni():
         c.append(calcoleq(prova[1], runbrutte[i]))
     c=np.array(c)
     return(a,b,c)
+    
+def Yuleintervallo(segnale, intervallo, deltat):
+    secondi=intervallo[0]
+    while (secondi < (intervallo[1])):
+        intervallino=((secondi+deltat-0.1),(secondi+deltat+0.1))
+        plottayule(segnale,(intervallino[0],intervallino[1]))
+        plt.ylim(-65,15)
+        plt.savefig(savedir+str(int(secondi*100))+'_YW_psd')
+        plt.close()
+        secondi+=0.04
+        
 
+# # crea una confusion matrix
+# actual=np.concatenate((np.zeros(86)+1,np.zeros(153-86)))
+# predicted=np.concatenate((np.zeros(2),np.zeros(151)+1))
+# matrix = confusion_matrix(actual,predicted, labels=[1,0])
+# tp, fn, fp, tn = confusion_matrix(actual,predicted,labels=[1,0]).reshape(-1)
+# print('Outcome values : \n', tp, fn, fp, tn)
+# df_cm = pd.DataFrame(matrix, range(2), range(2))
+# sn.set(font_scale=1.4) # for label size
+# sn.heatmap(df_cm, annot=True, annot_kws={"size": 16}) # font size
+# plt.show()
+# 
+# matrix = classification_report(actual,predicted,labels=[1,0])
+# print('Classification report : \n',matrix)
 # Plot overload example:
 # for j in range (0,len(runbelle)):
 #     plottaspettrosbucato(prova[1],(runbelle[j][0],runbelle[j][1]))
