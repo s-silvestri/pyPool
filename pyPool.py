@@ -18,6 +18,8 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import plot_confusion_matrix
 from sklearn.metrics import classification_report
 import seaborn as sn
+from scipy.signal import butter, lfilter, freqz
+from scipy import stats
 windows=False
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -25,11 +27,11 @@ def loadwav(file):
     return (samplerate, data*813.5330/32767) # quel numerino è per la calibrazione del sensore audio
 
 #---------------------- Qui ci sono un po' di indirizzi di cartelle da cui volendo si caricano facilmente i file: ognuno le aggiorni con le sue folder preferite, idealmente tutti i file sono in una cartella poi vengono caricate in un vettore filelist[].
-loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
+#loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
+loadir='/media/kibuzo/6317E4611EC4DD5F/Buche/misure_a_giro_ospedaletto_2/Pint/unzipped/run_spezzate/'
 
 savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
 savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Untriggered/Gronchi/'
-
 
 
 if windows:
@@ -51,6 +53,27 @@ def fake_log(x, pos):
     'The two args are the value and tick position'
     return r'$10^{%2d}$' % (x)
 
+#funzione seno usata per il fit
+def sin(amplitude, phase, angular, t):
+    return amplitude*np.sin(angular*t+phase)
+    
+def butter_lowpass(cutoff, fs, order=5):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return b, a
+
+def butter_lowpass_filter(data, cutoff, fs, order=5):
+    b, a = butter_lowpass(cutoff, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
+
+def trimMean(tlist,tperc):
+    removeN = int(math.floor(len(tlist) * tperc / 2))
+    tlist.sort()
+    if removeN > 0: tlist = tlist[removeN:-removeN]
+    return reduce(lambda a,b : a+b, tlist) / float(len(tlist))
+    
 #Le prossime funzioni trasformano l'input in secondi nel numero di campioni e viceversa. Da aggiornare se cambia la frequenza di sampling    
 def secondi(campioni):
     sampling=44100
@@ -63,6 +86,16 @@ def campioni(secondi):
 def PtoLeq(P):
     P0=2e-5
     return (10*np.log10(P**2/P0**2))
+    
+def fittaseno(data):
+    pdata=pd.Series(data)
+    upsampled = pdata.resample('D')
+    interpolated = upsampled.interpolate(method='spline', order=2)
+    x=np.linspace(0,len(data)-1, len(data))
+    from scipy.optimize import curve_fit
+    popt,pcov=curve_fit(sin,x,data,p0=(np.max(data), data[0]/np.max(data), 0.014))
+    return popt,x
+        
     
 #prendo tutto in secondi, per ora assumo comportamento virtuoso dell'operatore, cioè le buche non devono essere sul bordo (intervallo di mezzo secondo), né fuori. Metti anche un check sulle buche, se mi passa un array vuoto non devo fare niente.
 def toglibuche(serie, inizio, fine, buche):
@@ -266,10 +299,12 @@ def plottapsdsbucata(data,intervallo):
     #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
     #fig, ax = plt.subplots()
     N=8192
-    plt.psd(data, NFFT=N, Fs=44100, detrend=None)
+    wind=sp.signal.blackmanharris(N)
+    plt.psd(data, NFFT=N, Fs=44100, window=wind, detrend=None)
     plt.xscale('log')
     #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
     plt.xlim(100,12800)
+    #plt.xlim(1,100)
     plt.xlabel('Frequency[Hz]')
     plt.show()
     
@@ -277,16 +312,18 @@ def plottapsdsbucata(data,intervallo):
 def plottayule(data,intervallo):
     sampling=44100
     intervallo=np.array(intervallo)
+    wind=sp.signal.blackmanharris(campioni(intervallo[1])-campioni(intervallo[0]))
     #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
     data=data[campioni(intervallo[0]):campioni(intervallo[1])]
     N = 8192
     order=500
-    p = pyule(data, order, NFFT=N, sampling=44100)
+    p = pyule(data*wind, order, NFFT=N, sampling=44100)
     #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
     p()
     p.plot(sides='centerdc')
     plt.xscale('log')
     plt.xlim(100,12800)
+    #plt.xlim(1,20)
     #plt.show()
     
 
@@ -485,7 +522,27 @@ def Yuleintervallo(segnale, intervallo, deltat):
         plt.savefig(savedir+str(int(secondi*100))+'_YW_psd')
         plt.close()
         secondi+=0.04
-        
+
+def calcolav(tratto, secondo):
+    tratto=butter_lowpass_filter(tratto[campioni(secondo-0.2):campioni(secondo+0.2)],20,44100)
+    #tratto=rollingavgpd(tratto,5000)
+    massimi=scipy.signal.find_peaks(tratto)
+    #max = stats.trim_mean(massimi[0], 0.1) # Trim 10% at both ends
+    #Tmedio=stats.trim_mean(massimi[0][1:]-massimi[0][:-1], 0.3)/44100
+    Tmediano=np.median(massimi[0][1:]-massimi[0][:-1])/44100
+    vmedia=(np.pi*0.656)/Tmediano
+    #adesso istogrammo ogni intervallo di un secondo, e se c'è un massimo restituisco quello, altrimenti la media tra massimi (bisogna pur vivere)
+    #histo=np.histogram(massimi[0][1:]-massimi[0][:-1])
+    #Treal=np.average(histo[1][np.where(histo[0]==np.max(histo[0]))])/44100
+    # vmedia=(np.pi*0.656)/Treal
+    return(vmedia)
+
+def distribuzionepicchi(tratto, secondo):
+    tratto=butter_lowpass_filter(tratto[campioni(secondo-10):campioni(secondo+10)],20,44100)
+    massimi=scipy.signal.find_peaks(tratto)
+    a=(massimi[0][1:]-massimi[0][:-1])/44100
+    v=(np.pi*0.656)/a
+    return v
 
 # # crea una confusion matrix
 # actual=np.concatenate((np.zeros(86)+1,np.zeros(153-86)))
