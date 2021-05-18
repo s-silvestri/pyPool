@@ -20,7 +20,7 @@ from sklearn.metrics import classification_report
 import seaborn as sn
 from scipy.signal import butter, lfilter, freqz
 from scipy import stats
-windows=False
+windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
     samplerate, data = read(file)
@@ -36,6 +36,7 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
+    loadir='E:/Buche/misure_a_giro_ospedaletto_2/Pint/unzipped/run_spezzate/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
@@ -44,6 +45,7 @@ for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
 prova=loadwav(filelist[0])
+encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
 #---------------------- Cominciano le funzioni
 
@@ -56,6 +58,9 @@ def fake_log(x, pos):
 #funzione seno usata per il fit
 def sin(amplitude, phase, angular, t):
     return amplitude*np.sin(angular*t+phase)
+
+def kph(mps):
+    return (3.6*mps)
     
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -536,14 +541,41 @@ def calcolav(tratto, secondo):
     #Treal=np.average(histo[1][np.where(histo[0]==np.max(histo[0]))])/44100
     # vmedia=(np.pi*0.656)/Treal
     return(vmedia)
+    
+def calcolavmin(tratto, secondo):
+    tratto=butter_lowpass_filter(tratto[campioni(secondo-0.5):campioni(secondo+0.5)],40,44100)
+    #tratto=rollingavgpd(tratto,5000)
+    massimi=scipy.signal.find_peaks(-(tratto[tratto**2 < 2000])**2)
+    massimitrim=scipy.stats.trimboth(massimi[0], 0.2)
+    # Tmedio=stats.trim_mean(massimi[0][1:]-massimi[0][:-1], 0.2)/44100
+    Tmedio=np.median(massimitrim[1:]-massimitrim[:-1])/44100
+    Tmax=Tmedio+0.5*np.std(massimitrim[1:]-massimitrim[:-1])/44100
+    Tmin=Tmedio-0.5*np.std(massimitrim[1:]-massimitrim[:-1])/44100
+    vmedia=(np.pi*0.656)/(2*Tmedio)
+    vmax=(np.pi*0.656)/(2*Tmin)
+    vmin=(np.pi*0.656)/(2*Tmax)
+    return(kph(vmedia), kph(vmin), kph(vmax))
 
+def genvecv(strada):
+    s=[]
+    for j in range (1, math.floor(secondi(len(strada)))):
+       s.append(calcolavmin(strada, j))
+    return (np.array(s)) 
+       
 def distribuzionepicchi(tratto, secondo):
     tratto=butter_lowpass_filter(tratto[campioni(secondo-10):campioni(secondo+10)],20,44100)
     massimi=scipy.signal.find_peaks(tratto)
     a=(massimi[0][1:]-massimi[0][:-1])/44100
     v=(np.pi*0.656)/a
     return v
+    
 
+def distribuzioneminimi(tratto, secondo):
+    tratto=butter_lowpass_filter(tratto[campioni(secondo-1):campioni(secondo+1)],20,44100)
+    massimi=scipy.signal.find_peaks(-(tratto[tratto**2 < 1000])**2)
+    a=(massimi[0][1:]-massimi[0][:-1])/44100
+    v=(np.pi*0.656)/a
+    return v
 # # crea una confusion matrix
 # actual=np.concatenate((np.zeros(86)+1,np.zeros(153-86)))
 # predicted=np.concatenate((np.zeros(2),np.zeros(151)+1))
