@@ -335,7 +335,7 @@ def plottayule(data,intervallo):
     #plt.xlim(1,20)
     #plt.show()
     
-# Calcola l'integrale della PSD in un intervallo di frequenza. Ricorda che freq2 è almeno la frequenza di nyquist, cioè 22000
+# Calcola l'integrale della PSD in un intervallo di frequenza. Ricorda che freq2 è almeno la frequenza di nyquist, cioè 22000. è rotto.
 def calcolapotenzayw(data, freq1, freq2):
     a=plottayule(data, (0,secondi(len(data))))
     psd=a.psd
