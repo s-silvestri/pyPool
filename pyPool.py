@@ -37,6 +37,7 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
     loadir='E:/Buche/misure_a_giro_ospedaletto_2/Pint/unzipped/run_spezzate/'
+    loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run9/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
@@ -44,8 +45,9 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[0])
-encoder=pd.read_csv(loadir+'vel_secondo.csv')
+prova=loadwav(filelist[1])
+provabrutto=loadwav(filelist[2])
+#encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
 #---------------------- Cominciano le funzioni
 
@@ -314,6 +316,7 @@ def plottapsdsbucata(data,intervallo):
     plt.show()
     
 
+#Plotta l'autoregressione yule walker nell'intervallo specificato in secondi, da indicare come vettore
 def plottayule(data,intervallo):
     sampling=44100
     intervallo=np.array(intervallo)
@@ -328,10 +331,25 @@ def plottayule(data,intervallo):
     p.plot(sides='centerdc')
     plt.xscale('log')
     plt.xlim(100,12800)
+    return (p)
     #plt.xlim(1,20)
     #plt.show()
     
-
+# Calcola l'integrale della PSD in un intervallo di frequenza. Ricorda che freq2 è almeno la frequenza di nyquist, cioè 22000
+def calcolapotenzayw(data, freq1, freq2):
+    a=plottayule(data, (0,secondi(len(data))))
+    psd=a.psd
+    #vettore delle frequenze
+    frequenze=np.array(a.frequencies())
+    spaziatura=(frequenze[1:]-frequenze[:-1])[-1]
+    #comincio a tagliare in frequenza
+    cutbasso=frequenze[frequenze>freq1]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    indicealto=int(np.where(frequenze<band[-1])[0])[0][0] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*cutbasso[indicebasso:indicealto])
+    return integrale
+    
 #Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
 def wavelet (sig, nlogbin):
     fsampling=44100
@@ -576,6 +594,17 @@ def distribuzioneminimi(tratto, secondo):
     a=(massimi[0][1:]-massimi[0][:-1])/44100
     v=(np.pi*0.656)/a
     return v
+    
+def picchiyule (data, secondo):
+    a=plottayule(data, (secondo-0.5, secondo+0.5))
+    psd=a.psd
+    spaziatura=(np.array(a.frequencies()[1:])-np.array(a.frequencies()[:-1]))[-1]
+    massimi=scipy.signal.find_peaks(psd)[0]*spaziatura
+    massimires=massimi[massimi>150]
+    return (massimires[:3])
+
+
+    
 # # crea una confusion matrix
 # actual=np.concatenate((np.zeros(86)+1,np.zeros(153-86)))
 # predicted=np.concatenate((np.zeros(2),np.zeros(151)+1))
