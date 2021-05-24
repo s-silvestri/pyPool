@@ -40,7 +40,7 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
     #loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
-    loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run8/'
+    loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run7/'
     #loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
@@ -49,7 +49,7 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[-2])
+prova=loadwav(filelist[-1])
 #provabrutto=loadwav(filelist[2])
 #encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
@@ -662,6 +662,14 @@ def wrapdf (data1,data2):
     df1 = pd.DataFrame(data1, index=np.arange(len(data1)), columns=('Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres', 'Label'))
     df2 = pd.DataFrame(data2, index=np.arange(len(data1), len(data2)+len(data1)), columns=('Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres', 'Label'))
     df=pd.concat([df1,df2])
+    df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']] = df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']].apply(pd.to_numeric)
+    return(df)
+
+# Fa lo stesso di wrapdf ma usando dataframe di pandas
+def wrapandas (df1,df2):
+    df2.set_index(np.arange(len(df1), len(df1)+len(df2))) 
+    df=pd.concat([df1,df2])
+    df.set_index(np.arange(len(df1)+len(df2)))
     df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']] = df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']].apply(pd.to_numeric)
     return(df)
 
