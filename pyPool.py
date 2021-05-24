@@ -36,8 +36,8 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
-    loadir='E:/Buche/misure_a_giro_ospedaletto_2/Pint/unzipped/run_spezzate/'
-    loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run9/'
+    loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
+    #loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run9/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
@@ -334,9 +334,19 @@ def plottayule(data,intervallo):
     return (p)
     #plt.xlim(1,20)
     #plt.show()
+
+def poweryule(data):
+    a=plottayule(data, (0,secondi(len(data))))
+    psd=a.psd
+    #vettore delle frequenze
+    frequenze=np.array(a.frequencies())
+    spaziatura=(frequenze[1:]-frequenze[:-1])[-1]
+    #comincio a tagliare in frequenza
+    integrale=np.sum(spaziatura*psd)
+    return 2*integrale
     
-# Calcola l'integrale della PSD in un intervallo di frequenza. Ricorda che freq2 è almeno la frequenza di nyquist, cioè 22000. è rotto.
-def calcolapotenzayw(data, freq1, freq2):
+# Calcola l'integrale della PSD in un intervallo di frequenza. Ricorda che freq2 è almeno la frequenza di nyquist, cioè 22000.
+def powerbandyw(data, freq1, freq2):
     a=plottayule(data, (0,secondi(len(data))))
     psd=a.psd
     #vettore delle frequenze
@@ -346,9 +356,29 @@ def calcolapotenzayw(data, freq1, freq2):
     cutbasso=frequenze[frequenze>freq1]
     indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
     band=cutbasso[cutbasso<freq2]
-    indicealto=int(np.where(frequenze<band[-1])[0])[0][0] #indice della frequenza più alta
-    integrale=np.sum(spaziatura*cutbasso[indicebasso:indicealto])
-    return integrale
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*psd[indicebasso:indicealto])
+    return 2*integrale
+    
+def poweratio(data, freq1, freq2, freq3, freq4):
+    a=plottayule(data, (0,secondi(len(data))))
+    Psd=a.psd
+    #vettore delle frequenze
+    frequenze=np.array(a.frequencies())
+    spaziatura=(frequenze[1:]-frequenze[:-1])[-1]
+    #comincio a tagliare in frequenza
+    cutbasso=frequenze[frequenze>freq1]
+    curbasso1=frequenze[frequenze>freq3]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    indicebasso1=np.where(frequenze>cutbasso1[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    band1=cutbasso[cutbasso1<freq4]
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
+    integrale1=np.sum(spaziatura*Psd[indicebasso1:indicealto1])
+    plt.close()
+    return integrale/integrale1
     
 #Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
 def wavelet (sig, nlogbin):
