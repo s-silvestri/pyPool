@@ -49,7 +49,7 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[-1])
+prova=loadwav(filelist[-2])
 #provabrutto=loadwav(filelist[2])
 #encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
@@ -637,7 +637,7 @@ def picchiyule (data, secondo):
     massimires=massimi[massimi>150]
     return (massimires[:3])
 
-#Calcola e restituisce il dataset per il machine learning 
+#Calcola e restituisce il dataset per il machine learning nel pacchetto data mandato in input (usa almeno .2 secondi)
 def calcolafeatures(data, tipo):
     Power=poweryule(data)
     Power5k=powerbandyw(data, 5000,22000)
@@ -647,7 +647,7 @@ def calcolafeatures(data, tipo):
     a=np.array((Power,Power5k,Ratio5k,Ratio1res,Primotoro,tipo))
     return(a)
 
-#lancia calcolafeatures su un intervallo largo dividendolo in pezzi da 0.2. Returna un array di array, vuole la classificazione del suolo.
+#lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente.
 def arrayfeatures(data, intervalli, classificazione):
     a=[]
     j=intervalli
