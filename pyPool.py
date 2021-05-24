@@ -20,6 +20,9 @@ from sklearn.metrics import classification_report
 import seaborn as sn
 from scipy.signal import butter, lfilter, freqz
 from scipy import stats
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+import seaborn as sns
 windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -36,8 +39,9 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
-    loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
-    #loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run9/'
+    #loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
+    loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run8/'
+    #loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
@@ -45,8 +49,8 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[1])
-provabrutto=loadwav(filelist[2])
+prova=loadwav(filelist[-2])
+#provabrutto=loadwav(filelist[2])
 #encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
 #---------------------- Cominciano le funzioni
@@ -368,11 +372,11 @@ def poweratio(data, freq1, freq2, freq3, freq4):
     spaziatura=(frequenze[1:]-frequenze[:-1])[-1]
     #comincio a tagliare in frequenza
     cutbasso=frequenze[frequenze>freq1]
-    curbasso1=frequenze[frequenze>freq3]
+    cutbasso1=frequenze[frequenze>freq3]
     indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
     indicebasso1=np.where(frequenze>cutbasso1[0])[0][0] #indice della frequenza più bassa
     band=cutbasso[cutbasso<freq2]
-    band1=cutbasso[cutbasso1<freq4]
+    band1=cutbasso1[cutbasso1<freq4]
     indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
     indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
     integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
@@ -633,7 +637,36 @@ def picchiyule (data, secondo):
     massimires=massimi[massimi>150]
     return (massimires[:3])
 
+#Calcola e restituisce il dataset per il machine learning 
+def calcolafeatures(data, tipo):
+    Power=poweryule(data)
+    Power5k=powerbandyw(data, 5000,22000)
+    Ratio5k=Power5k/Power
+    Ratio1res=poweratio(data, 366,495,100,5000)
+    Primotoro=powerbandyw(data,175,245)
+    a=np.array((Power,Power5k,Ratio5k,Ratio1res,Primotoro,tipo))
+    return(a)
 
+#lancia calcolafeatures su un intervallo largo dividendolo in pezzi da 0.2. Returna un array di array, vuole la classificazione del suolo.
+def arrayfeatures(data, intervalli, classificazione):
+    a=[]
+    j=intervalli
+    while j<secondi(len(data)):
+        a.append(calcolafeatures(data[campioni(j-0.2): campioni(j)], classificazione))
+        j+=intervalli
+    plt.close()
+    return (np.array(a))
+
+#costruisce un dataframe di pandas partendo da due array numpy returnati da arrayfeatures per accorparli in un unico dataset
+def wrapdf (data1,data2):
+    df1 = pd.DataFrame(data1, index=np.arange(len(data1)), columns=('Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres', 'Label'))
+    df2 = pd.DataFrame(data2, index=np.arange(len(data1), len(data2)+len(data1)), columns=('Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres', 'Label'))
+    df=pd.concat([df1,df2])
+    df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']] = df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']].apply(pd.to_numeric)
+    return(df)
+
+# # Violin plot
+#  sns.violinplot(y='Label',x='Total_power', data=todo, inner='quartile')
     
 # # crea una confusion matrix
 # actual=np.concatenate((np.zeros(86)+1,np.zeros(153-86)))
