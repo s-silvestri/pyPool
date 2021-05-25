@@ -22,6 +22,7 @@ from scipy.signal import butter, lfilter, freqz
 from scipy import stats
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import confusion_matrix
 import seaborn as sns
 windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
@@ -39,9 +40,10 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
-    #loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
-    loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run7/'
+    loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
+    #loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run7/'
     #loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
+    loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
@@ -49,7 +51,7 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[-2])
+prova=loadwav(filelist[-1])
 #provabrutto=loadwav(filelist[2])
 #encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
@@ -647,15 +649,15 @@ def calcolafeatures(data, tipo):
     a=np.array((Power,Power5k,Ratio5k,Ratio1res,Primotoro,tipo))
     return(a)
 
-#lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente.
+#lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente. Ricorda che deve essere una stringa.
 def arrayfeatures(data, intervalli, classificazione):
-    a=[]
+    feat=[]
     j=intervalli
     while j<secondi(len(data)):
-        a.append(calcolafeatures(data[campioni(j-0.2): campioni(j)], classificazione))
+        feat.append(calcolafeatures(data[campioni(j-intervalli): campioni(j)], classificazione))
         j+=intervalli
     plt.close()
-    return (np.array(a))
+    return np.array(feat)
 
 #costruisce un dataframe di pandas partendo da due array numpy returnati da arrayfeatures per accorparli in un unico dataset
 def wrapdf (data1,data2):
@@ -675,7 +677,22 @@ def wrapandas (df1,df2):
 
 # # Violin plot
 #  sns.violinplot(y='Label',x='Total_power', data=todo, inner='quartile')
+#  sns.pairplot(dataset, hue='class', markers='+')
     
+    
+# # Confusion matrix plot: prima createla poi plottala col seguente
+# group_names = ['True Neg','False Pos','False Neg','True Pos']
+# #group_counts = [“{0:0.0f}”.format(value) for value in
+#                 #cf_matrix.flatten()]
+# #group_percentages = ["{0:.2%}".format(value) for value in
+#                      #cf_matrix.flatten()/np.sum(cf_matrix)]
+# group_percentages= ["{0:.2%}".format(cf_matrix[0][0]/np.sum(cf_matrix[0])),"{0:.2%}".format(cf_matrix[0][1]/np.sum(cf_matrix[0])),  "{0:.2%}".format(cf_matrix[1][0]/np.sum(cf_matrix[1])),"{0:.2%}".format(cf_matrix[1][1]/np.sum(cf_matrix[1]))]
+# labels = [f"{v1}\n{v2}" for v1, v2 in
+#           zip(group_names,group_percentages)]
+# labels = np.asarray(labels).reshape(2,2)
+# sns.heatmap(cf_matrix, annot=labels, fmt='', cmap='Blues')
+
+
 # # crea una confusion matrix
 # actual=np.concatenate((np.zeros(86)+1,np.zeros(153-86)))
 # predicted=np.concatenate((np.zeros(2),np.zeros(151)+1))
