@@ -1,5 +1,6 @@
 #Achtung: le tue medie mobili sembrano produrre in uscita vettori che sono lunghi almeno 2 volte la lunghezza della finestra, il che credo che abbia senso ma non ho tempo di controllarlo, nel dubbio usalo solo su vettori lunghi
 from scipy.io.wavfile import read
+from scipy.io.wavfile import write
 from scipy.signal import spectrogram
 import os
 import matplotlib.pyplot as plt
@@ -21,14 +22,18 @@ import seaborn as sn
 from scipy.signal import butter, lfilter, freqz
 from scipy import stats
 from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier,NeighborhoodComponentsAnalysis
 from sklearn.metrics import confusion_matrix
+from sklearn.pipeline import Pipeline
 import seaborn as sns
+from mlxtend.plotting import plot_decision_regions
 windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
     samplerate, data = read(file)
-    return (samplerate, data*813.5330/32767) # quel numerino è per la calibrazione del sensore audio
+    #Definisco il fattore di scala della traccia audio. 32767 sono i canali adc da convertire in [-1,1] per un 16 bit, mentre 813 è per passare in pressione. Se usassi tensorflow o matlab basta 813
+    scale=813.5330/32767
+    return (samplerate, data*scale) 
 
 #---------------------- Qui ci sono un po' di indirizzi di cartelle da cui volendo si caricano facilmente i file: ognuno le aggiorni con le sue folder preferite, idealmente tutti i file sono in una cartella poi vengono caricate in un vettore filelist[].
 #loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
@@ -42,16 +47,25 @@ if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
     loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
     #loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run7/'
-    #loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
-    loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
+    loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
+    #loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
+    loadir='F:/Misure navacchio 2/pint/unzipped/run_spezzate/'
+    loadirph='F:/buche30/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
 filelist=[]
+
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[-1])
+prova=loadwav(filelist[4])
+
+filelistph=[]
+for filename in os.listdir(loadirph):
+    if filename.endswith(".wav"):
+        filelistph.append(loadirph+filename)
+    
 #provabrutto=loadwav(filelist[2])
 #encoder=pd.read_csv(loadir+'vel_secondo.csv')
 
@@ -340,9 +354,25 @@ def plottayule(data,intervallo):
     return (p)
     #plt.xlim(1,20)
     #plt.show()
+    
+def getyule(data,intervallo):
+    sampling=44100
+    intervallo=np.array(intervallo)
+    wind=sp.signal.blackmanharris(campioni(intervallo[1])-campioni(intervallo[0]))
+    #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
+    data=data[campioni(intervallo[0]):campioni(intervallo[1])]
+    N = 8192
+    order=500
+    p = pyule(data*wind, order, NFFT=N, sampling=44100)
+    #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
+    p()
+    return (p)
+    #plt.xlim(1,20)
+    #plt.show()
+
 
 def poweryule(data):
-    a=plottayule(data, (0,secondi(len(data))))
+    a=getyule(data, (0,secondi(len(data))))
     psd=a.psd
     #vettore delle frequenze
     frequenze=np.array(a.frequencies())
@@ -353,7 +383,7 @@ def poweryule(data):
     
 # Calcola l'integrale della PSD in un intervallo di frequenza. Ricorda che freq2 è almeno la frequenza di nyquist, cioè 22000.
 def powerbandyw(data, freq1, freq2):
-    a=plottayule(data, (0,secondi(len(data))))
+    a=getyule(data, (0,secondi(len(data))))
     psd=a.psd
     #vettore delle frequenze
     frequenze=np.array(a.frequencies())
@@ -367,7 +397,7 @@ def powerbandyw(data, freq1, freq2):
     return 2*integrale
     
 def poweratio(data, freq1, freq2, freq3, freq4):
-    a=plottayule(data, (0,secondi(len(data))))
+    a=getyule(data, (0,secondi(len(data))))
     Psd=a.psd
     #vettore delle frequenze
     frequenze=np.array(a.frequencies())
@@ -383,7 +413,6 @@ def poweratio(data, freq1, freq2, freq3, freq4):
     indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
     integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
     integrale1=np.sum(spaziatura*Psd[indicebasso1:indicealto1])
-    plt.close()
     return integrale/integrale1
     
 #Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
@@ -640,7 +669,7 @@ def picchiyule (data, secondo):
     return (massimires[:3])
 
 #Calcola e restituisce il dataset per il machine learning nel pacchetto data mandato in input (usa almeno .2 secondi)
-def calcolafeatures(data, tipo):
+def calcolafeaturesmasino(data, tipo):
     Power=poweryule(data)
     Power5k=powerbandyw(data, 5000,22000)
     Ratio5k=Power5k/Power
@@ -648,23 +677,33 @@ def calcolafeatures(data, tipo):
     Primotoro=powerbandyw(data,175,245)
     a=np.array((Power,Power5k,Ratio5k,Ratio1res,Primotoro,tipo))
     return(a)
+    
+def calcolafeaturesipool(data, tipo):
+    Power=poweryule(data)
+    Primotoro=powerbandyw(data, 200,240)
+    Ratioprimo=poweratio(data, 200,240, 270,400)
+    Ratiosecondo=poweratio(data, 400,460,480,620)
+    Ratioterzo=poweratio(data,630,660,700, 830)
+    Ratiohifreq=poweratio(data,2500,8000,1500, 2000)
+    a=np.array((Power,Primotoro,Ratioprimo,Ratiosecondo,Ratioterzo,Ratiohifreq,tipo))
+    return(a)
 
 #lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente. Ricorda che deve essere una stringa.
 def arrayfeatures(data, intervalli, classificazione):
     feat=[]
     j=intervalli
     while j<secondi(len(data)):
-        feat.append(calcolafeatures(data[campioni(j-intervalli): campioni(j)], classificazione))
+        feat.append(calcolafeaturesipool(data[campioni(j-intervalli): campioni(j)], classificazione))
         j+=intervalli
     plt.close()
     return np.array(feat)
 
 #costruisce un dataframe di pandas partendo da due array numpy returnati da arrayfeatures per accorparli in un unico dataset
 def wrapdf (data1,data2):
-    df1 = pd.DataFrame(data1, index=np.arange(len(data1)), columns=('Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres', 'Label'))
-    df2 = pd.DataFrame(data2, index=np.arange(len(data1), len(data2)+len(data1)), columns=('Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres', 'Label'))
+    df1 = pd.DataFrame(data1, index=np.arange(len(data1)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
+    df2 = pd.DataFrame(data2, index=np.arange(len(data1), len(data2)+len(data1)),columns=('Total_power', 'Firstres','Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
     df=pd.concat([df1,df2])
-    df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']] = df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']].apply(pd.to_numeric)
+    df[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']] = df[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']].apply(pd.to_numeric)
     return(df)
 
 # Fa lo stesso di wrapdf ma usando dataframe di pandas
@@ -674,6 +713,55 @@ def wrapandas (df1,df2):
     df.set_index(np.arange(len(df1)+len(df2)))
     df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']] = df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']].apply(pd.to_numeric)
     return(df)
+
+# bello=arrayfeatures(prova[1][campioni(50):campioni(70)], 0.4, 'bello')
+# brutto=arrayfeatures(prova[1][campioni(95):campioni(115)], 0.4, 'brutto')
+# dataframe=wrapdf(bello, brutto)
+
+# b=[]
+# for j in filelistph:
+#     a=loadwav(j)
+#     if secondi(len(a[1]))>0.4:
+#         datanp=arrayfeatures(a[1][0:campioni(math.floor(secondi(len(a[1]))/0.4)*0.4)], 0.4, 'ph')
+#         df=pd.DataFrame(datanp, index=np.arange(len(datanp)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
+#         b.append(df)
+    
+def nearest(dataset):
+    X=dataset.drop(columns=['Label'])
+    y=dataset['Label'].values
+    X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.7, random_state=42)
+    nca = NeighborhoodComponentsAnalysis(random_state=42)
+    knn = KNeighborsClassifier(n_neighbors=3)
+    nca_pipe = Pipeline([('nca', nca), ('knn', knn)])
+    nca_pipe.fit(X_train, y_train)
+    print(nca_pipe.score(X_test, y_test))
+
+
+# sns.scatterplot(x="Total_power", y="Ratio_2res", hue='Label', data=dataset)
+# 
+# # define bounds of the domain
+# min1, max1 = X['Total_power'].min()-1, X['Total_power'].max()+1
+# min2, max2 = X['Ratio_2res'].min()-1, X['Ratio_2res'].max()+1
+# #uniform range across the dmain
+# x1grid = arange(min1, max1, 0.1)
+# x2grid = arange(min2, max2, 0.1)
+# # create all of the lines and rows of the grid
+# xx, yy = np.meshgrid(x1grid, x2grid)
+# # flatten each grid to a vector
+# r1, r2 = xx.flatten(), yy.flatten()
+# r1, r2 = r1.reshape((len(r1), 1)), r2.reshape((len(r2), 1))
+# # horizontal stack vectors to create x1,x2 input for the model
+# grid =np. hstack((r1,r2))
+# # make predictions for the grid
+# yhat = knn.predict(grid)
+# # reshape the predictions back into a grid
+# zz = yhat.reshape(xx.shape)
+# # plot the grid of x, y and z values as a surface
+# pyplot.contourf(xx, yy, zz, cmap='Paired')
+
+    
+#dataset.to_csv(r'F:/Misure navacchio 2/pint/unzipped/run_spezzate/dataset.csv')
+
 
 # # Violin plot
 #  sns.violinplot(y='Label',x='Total_power', data=todo, inner='quartile')
