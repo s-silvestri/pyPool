@@ -60,6 +60,7 @@ for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
 prova=loadwav(filelist[4])
+test=loadwav(filelist[-3])
 
 filelistph=[]
 for filename in os.listdir(loadirph):
@@ -668,7 +669,7 @@ def picchiyule (data, secondo):
     massimires=massimi[massimi>150]
     return (massimires[:3])
 
-#Calcola e restituisce il dataset per il machine learning nel pacchetto data mandato in input (usa almeno .2 secondi)
+#Calcola e restituisce il dataset per il machine learning nel pacchetto data mandato in input (usa almeno .4 secondi)
 def calcolafeaturesmasino(data, tipo):
     Power=poweryule(data)
     Power5k=powerbandyw(data, 5000,22000)
@@ -679,15 +680,118 @@ def calcolafeaturesmasino(data, tipo):
     return(a)
     
 def calcolafeaturesipool(data, tipo):
-    Power=poweryule(data)
-    Primotoro=powerbandyw(data, 200,240)
-    Ratioprimo=poweratio(data, 200,240, 270,400)
-    Ratiosecondo=poweratio(data, 400,460,480,620)
-    Ratioterzo=poweratio(data,630,660,700, 830)
-    Ratiohifreq=poweratio(data,2500,8000,1500, 2000)
+    a=getyule(data, (0,secondi(len(data))))
+    psd=a.psd
+    Psd=psd
+    #vettore delle frequenze
+    frequenze=np.array(a.frequencies())
+    spaziatura=(frequenze[1:]-frequenze[:-1])[-1]
+    #comincio a tagliare in frequenza
+    integrale=np.sum(spaziatura*psd)
+    Power=2*integrale
+
+    freq1=200
+    freq2=240
+    #comincio a tagliare in frequenza
+    frequenze=np.array(a.frequencies())
+    cutbasso=frequenze[frequenze>freq1]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*psd[indicebasso:indicealto])
+    Primotoro=2*integrale
+    
+    freq3=270
+    freq4=400
+    frequenze=np.array(a.frequencies())
+    cutbasso=frequenze[frequenze>freq1]
+    cutbasso1=frequenze[frequenze>freq3]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    indicebasso1=np.where(frequenze>cutbasso1[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    band1=cutbasso1[cutbasso1<freq4]
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
+    integrale1=np.sum(spaziatura*Psd[indicebasso1:indicealto1])
+    Ratioprimo= integrale/integrale1
+    
+    freq1=400
+    freq2=460
+    freq3=480
+    freq4=620
+    frequenze=np.array(a.frequencies())
+    cutbasso=frequenze[frequenze>freq1]
+    cutbasso1=frequenze[frequenze>freq3]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    indicebasso1=np.where(frequenze>cutbasso1[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    band1=cutbasso1[cutbasso1<freq4]
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
+    integrale1=np.sum(spaziatura*Psd[indicebasso1:indicealto1])
+    Ratiosecondo= integrale/integrale1
+
+    freq1=630
+    freq2=660
+    freq3=700
+    freq4=830
+    frequenze=np.array(a.frequencies())
+    cutbasso=frequenze[frequenze>freq1]
+    cutbasso1=frequenze[frequenze>freq3]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    indicebasso1=np.where(frequenze>cutbasso1[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    band1=cutbasso1[cutbasso1<freq4]
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
+    integrale1=np.sum(spaziatura*Psd[indicebasso1:indicealto1])
+    Ratioterzo= integrale/integrale1
+    
+    freq1=2500
+    freq2=8000
+    freq3=1500
+    freq4=2000
+    frequenze=np.array(a.frequencies())
+    cutbasso=frequenze[frequenze>freq1]
+    cutbasso1=frequenze[frequenze>freq3]
+    indicebasso=np.where(frequenze>cutbasso[0])[0][0] #indice della frequenza più bassa
+    indicebasso1=np.where(frequenze>cutbasso1[0])[0][0] #indice della frequenza più bassa
+    band=cutbasso[cutbasso<freq2]
+    band1=cutbasso1[cutbasso1<freq4]
+    indicealto=(np.where(frequenze<band[-1]))[0][-1] #indice della frequenza più alta
+    indicealto1=(np.where(frequenze<band1[-1]))[0][-1] #indice della frequenza più alta
+    integrale=np.sum(spaziatura*Psd[indicebasso:indicealto])
+    integrale1=np.sum(spaziatura*Psd[indicebasso1:indicealto1])
+    Ratiohifreq= integrale/integrale1
+    
+    
+    # Power=poweryule(data)
+    # Primotoro=powerbandyw(data, 200,240)
+    # Ratioprimo=poweratio(data, 200,240, 270,400)
+    # Ratiosecondo=poweratio(data, 400,460,480,620)
+    # Ratioterzo=poweratio(data,630,660,700, 830)
+    # Ratiohifreq=poweratio(data,2500,8000,1500, 2000)
     a=np.array((Power,Primotoro,Ratioprimo,Ratiosecondo,Ratioterzo,Ratiohifreq,tipo))
     return(a)
 
+def campionadati(data, rangebello, rangebrutto, nsamples):
+    feat=[]
+    for j in range (0, nsamples):
+        rand=np.random.random()
+        secbello=(0.4+rangebello[0]+(rangebello[1]-rangebello[0])*rand)
+        secbrutto=(0.4+rangebrutto[0]+(rangebrutto[1]-rangebrutto[0])*rand)
+        feat.append(calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello)], 'bello'))
+        feat.append(calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto)], 'brutto'))
+    featdf=pd.DataFrame(feat, index=np.arange(len(feat)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
+    featdf=featdf.dropna(how='all')
+    featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']] = featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']].apply(pd.to_numeric)
+    return (featdf)
+        
+    
+        
 #lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente. Ricorda che deve essere una stringa.
 def arrayfeatures(data, intervalli, classificazione):
     feat=[]
@@ -727,38 +831,44 @@ def wrapandas (df1,df2):
 #         b.append(df)
     
 def nearest(dataset):
-    X=dataset.drop(columns=['Label'])
+    X=dataset.drop(columns=['Unnamed: 0', 'Label', 'Firstres', 'Ratio_hifreq', 'Ratio_1res', 'Ratio_3res'])
+    print (X)
     y=dataset['Label'].values
-    X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.7, random_state=42)
-    nca = NeighborhoodComponentsAnalysis(random_state=42)
+    X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.5, random_state=42)
+    nca = NeighborhoodComponentsAnalysis(random_state=87)
     knn = KNeighborsClassifier(n_neighbors=3)
     nca_pipe = Pipeline([('nca', nca), ('knn', knn)])
     nca_pipe.fit(X_train, y_train)
     print(nca_pipe.score(X_test, y_test))
+    return (nca_pipe)
 
+ 
+# define bounds of the domain
+min1, max1 = X['Total_power'].min()-1, X['Total_power'].max()+1
+min2, max2 = X['Ratio_2res'].min()-1, X['Ratio_2res'].max()+1
+#uniform range across the dmain
+x1grid = arange(min1, max1, (max1-min1)/500)
+x2grid = arange(min2, max2, (max2-min2)/500)
+# create all of the lines and rows of the grid
+xx, yy = np.meshgrid(x1grid, x2grid)
+# flatten each grid to a vector
+r1, r2 = xx.flatten(), yy.flatten()
+r1, r2 = r1.reshape((len(r1), 1)), r2.reshape((len(r2), 1))
+# horizontal stack vectors to create x1,x2 input for the model
+grid =np. hstack((r1,r2))
+# make predictions for the grid
+yhat = classificatore.predict(grid)
+# reshape the predictions back into a grid
+zz = yhat.reshape(xx.shape)
+ZZ=zz=='brutto'
+# plot the grid of x, y and z values as a surface
+plt.contourf(xx, yy, ZZ,cmap='Paired')
+#plt.contour(xx, yy, ZZ,cmap='Paired')
 
-# sns.scatterplot(x="Total_power", y="Ratio_2res", hue='Label', data=dataset)
-# 
-# # define bounds of the domain
-# min1, max1 = X['Total_power'].min()-1, X['Total_power'].max()+1
-# min2, max2 = X['Ratio_2res'].min()-1, X['Ratio_2res'].max()+1
-# #uniform range across the dmain
-# x1grid = arange(min1, max1, 0.1)
-# x2grid = arange(min2, max2, 0.1)
-# # create all of the lines and rows of the grid
-# xx, yy = np.meshgrid(x1grid, x2grid)
-# # flatten each grid to a vector
-# r1, r2 = xx.flatten(), yy.flatten()
-# r1, r2 = r1.reshape((len(r1), 1)), r2.reshape((len(r2), 1))
-# # horizontal stack vectors to create x1,x2 input for the model
-# grid =np. hstack((r1,r2))
-# # make predictions for the grid
-# yhat = knn.predict(grid)
-# # reshape the predictions back into a grid
-# zz = yhat.reshape(xx.shape)
-# # plot the grid of x, y and z values as a surface
-# pyplot.contourf(xx, yy, zz, cmap='Paired')
-
+sns.scatterplot(x="Total_power", y="Ratio_2res", hue='Label', data=testset)
+plt.xlim(min(xx[0]), max(xx[0]))
+plt.ylim(min(yy[0]), max(yy[-1]))
+plt.show()
     
 #dataset.to_csv(r'F:/Misure navacchio 2/pint/unzipped/run_spezzate/dataset.csv')
 
