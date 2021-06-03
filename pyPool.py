@@ -27,6 +27,7 @@ from sklearn.metrics import confusion_matrix
 from sklearn.pipeline import Pipeline
 import seaborn as sns
 from mlxtend.plotting import plot_decision_regions
+from multiprocessing import Pool
 windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -59,8 +60,8 @@ filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
-prova=loadwav(filelist[4])
-test=loadwav(filelist[-3])
+prova=loadwav(filelist[-1])
+#test=loadwav(filelist[-3])
 
 filelistph=[]
 for filename in os.listdir(loadirph):
@@ -538,29 +539,29 @@ def savetriplot(segnale, deltat, savedir, timestamps):
         plt.savefig(savedir+str(int(timestamps[j]))+'_triplot')
         plt.close()
 
-def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband):
-    sampling=44100
-    Mediemobili=rollingtrig(np.sqrt(ac.octavepass(segnale,centerband, fs=sampling, order=8, fraction=3)**2), math.floor((sampling*25)/centerband),math.floor(sampling/(2*centerband)))
-    xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
-    for j in range (0, len(timestamps)):
-        print(timestamps[j])
-        intervallo=(math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100))
-        signal=segnale[intervallo[0]:intervallo[1]]
-        plt.subplot(311)
-        plottaserietemporale(np.sqrt(signal**2),sampling)
-        plt.subplot(312)
-        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[0][intervallo[0]:intervallo[1]], label='pressione rms')
-        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[1][intervallo[0]:intervallo[1]], label='fondo rms')
-        plt.plot(xvec[intervallo[0]:intervallo[1]],np.sqrt(Mediemobili[2][intervallo[0]:intervallo[1]]), label='varianza')
-        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]), max(xvec[intervallo[0]:intervallo[1]]))
-        plt.legend(loc='upper left')
-        plt.subplot(313)
-        plt.plot(xvec[intervallo[0]:intervallo[1]], np.sqrt(((Mediemobili[0][intervallo[0]:intervallo[1]]-Mediemobili[1][intervallo[0]:intervallo[1]])**2)/Mediemobili[2][intervallo[0]:intervallo[1]]), label='trigger')
-        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]),max(xvec[intervallo[0]:intervallo[1]]))
-        #plt.legend(loc='upper left')
-        #plt.show()
-        plt.savefig(savedir+str(int(timestamps[j]))+'_triplot_resonant')
-        plt.close()
+# def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband):
+#     sampling=44100
+#     Mediemobili=rollingtrig(np.sqrt(, math.floor((sampling*25)/centerband),math.floor(sampling/(2*centerband)))
+#     xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
+#     for j in range (0, len(timestamps)):
+#         print(timestamps[j])
+#         intervallo=(math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100))
+#         signal=segnale[intervallo[0]:intervallo[1]]
+#         plt.subplot(311)
+#         plottaserietemporale(np.sqrt(signal**2),sampling)
+#         plt.subplot(312)
+#         plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[0][intervallo[0]:intervallo[1]], label='pressione rms')
+#         plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[1][intervallo[0]:intervallo[1]], label='fondo rms')
+#         plt.plot(xvec[intervallo[0]:intervallo[1]],np.sqrt(Mediemobili[2][intervallo[0]:intervallo[1]]), label='varianza')
+#         plt.xlim(min(xvec[intervallo[0]:intervallo[1]]), max(xvec[intervallo[0]:intervallo[1]]))
+#         plt.legend(loc='upper left')
+#         plt.subplot(313)
+#         plt.plot(xvec[intervallo[0]:intervallo[1]], np.sqrt(((Mediemobili[0][intervallo[0]:intervallo[1]]-Mediemobili[1][intervallo[0]:intervallo[1]])**2)/Mediemobili[2][intervallo[0]:intervallo[1]]), label='trigger')
+#         plt.xlim(min(xvec[intervallo[0]:intervallo[1]]),max(xvec[intervallo[0]:intervallo[1]]))
+#         #plt.legend(loc='upper left')
+#         #plt.show()
+#         plt.savefig(savedir+str(int(timestamps[j]))+'_triplot_resonant')
+#         plt.close()
 
 def savetimestamps(dir, vec):
     vec=np.array(vec)
@@ -783,14 +784,45 @@ def campionadati(data, rangebello, rangebrutto, nsamples):
         rand=np.random.random()
         secbello=(0.4+rangebello[0]+(rangebello[1]-rangebello[0])*rand)
         secbrutto=(0.4+rangebrutto[0]+(rangebrutto[1]-rangebrutto[0])*rand)
-        feat.append(calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello)], 'bello'))
-        feat.append(calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto)], 'brutto'))
+        featbello=calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello)], 'bello')
+        featbrutto=calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto)], 'brutto')
+    featdf=pd.DataFrame(feat, index=np.arange(len(feat)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
+    featdf=featdf.dropna(how='all')
+    featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']] = featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']].apply(pd.to_numeric)
+    return (featdf)
+
+# cerca di usare Pool di multiprocessing per eseguire a 4 a 4 i job, descrizione nel quadernino. Per favore, abbi la decenza di passare una potenza del due come numero di oggetti per ora, altrimenti rompi tutto. Anzi, è già rotto
+def campionadatiparallelo(data, rangebello, rangebrutto, nsamples):
+    # sampeach=nsamples//mp.cpu_count()
+    # module=nsamples%mp.cpu_count()
+    sampeach=nsamples//4
+    module=nsamples%4
+    feat=np.zeros(nsamples)
+    feat=np.array(feat, dtype=object) #altrimenti non ci posso mettere dentro altri array
+    list0,list1,list2,list3=[],[],[],[]
+    work=([sampeach, 0, rangebello, rangebrutto,list0],[sampeach, 1, rangebello, rangebrutto,list1],[sampeach, 2, rangebello, rangebrutto,list2],[sampeach+module, 3, rangebello, rangebrutto,list3])
+    def work_log(work_data):
+        for j in range (0, work_data[0]):
+            rand=np.random.random()
+            rangebello=work_data[1]
+            rangebrutto=work_data[2]
+            secbello=(0.4+rangebello[0]+(rangebello[1]-rangebello[0])*rand)
+            secbrutto=(0.4+rangebrutto[0]+(rangebrutto[1]-rangebrutto[0])*rand)
+            featbello=calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello)], 'bello')
+            featbrutto=calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto)], 'brutto')
+            work_data[-1].append(featbello)
+            work_data[-1].append(featbrutto)
+    def pool_handler():
+        p=Pool(4)
+        p.map(work_log, work)
+    if __name__=='__main__':
+        pool_handler()
+    feat=list0+list1+list2+list3
     featdf=pd.DataFrame(feat, index=np.arange(len(feat)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
     featdf=featdf.dropna(how='all')
     featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']] = featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']].apply(pd.to_numeric)
     return (featdf)
         
-    
         
 #lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente. Ricorda che deve essere una stringa.
 def arrayfeatures(data, intervalli, classificazione):
@@ -831,10 +863,10 @@ def wrapandas (df1,df2):
 #         b.append(df)
     
 def nearest(dataset):
-    X=dataset.drop(columns=['Unnamed: 0', 'Label', 'Firstres', 'Ratio_hifreq', 'Ratio_1res', 'Ratio_3res'])
+    X=dataset.drop(columns=['Label'])
     print (X)
     y=dataset['Label'].values
-    X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.5, random_state=42)
+    X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.7, random_state=42)
     nca = NeighborhoodComponentsAnalysis(random_state=87)
     knn = KNeighborsClassifier(n_neighbors=3)
     nca_pipe = Pipeline([('nca', nca), ('knn', knn)])
@@ -866,8 +898,8 @@ plt.contourf(xx, yy, ZZ,cmap='Paired')
 #plt.contour(xx, yy, ZZ,cmap='Paired')
 
 sns.scatterplot(x="Total_power", y="Ratio_2res", hue='Label', data=testset)
-plt.xlim(min(xx[0]), max(xx[0]))
-plt.ylim(min(yy[0]), max(yy[-1]))
+#plt.xlim(min(xx[0]), max(xx[0]))
+#plt.ylim(min(yy[0]), max(yy[-1]))
 plt.show()
     
 #dataset.to_csv(r'F:/Misure navacchio 2/pint/unzipped/run_spezzate/dataset.csv')
@@ -875,7 +907,7 @@ plt.show()
 
 # # Violin plot
 #  sns.violinplot(y='Label',x='Total_power', data=todo, inner='quartile')
-#  sns.pairplot(dataset, hue='class', markers='+')
+#  sns.pairplot(testset, hue='Label', markers='+')
     
     
 # # Confusion matrix plot: prima createla poi plottala col seguente
