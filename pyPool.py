@@ -539,29 +539,29 @@ def savetriplot(segnale, deltat, savedir, timestamps):
         plt.savefig(savedir+str(int(timestamps[j]))+'_triplot')
         plt.close()
 
-# def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband):
-#     sampling=44100
-#     Mediemobili=rollingtrig(np.sqrt(, math.floor((sampling*25)/centerband),math.floor(sampling/(2*centerband)))
-#     xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
-#     for j in range (0, len(timestamps)):
-#         print(timestamps[j])
-#         intervallo=(math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100))
-#         signal=segnale[intervallo[0]:intervallo[1]]
-#         plt.subplot(311)
-#         plottaserietemporale(np.sqrt(signal**2),sampling)
-#         plt.subplot(312)
-#         plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[0][intervallo[0]:intervallo[1]], label='pressione rms')
-#         plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[1][intervallo[0]:intervallo[1]], label='fondo rms')
-#         plt.plot(xvec[intervallo[0]:intervallo[1]],np.sqrt(Mediemobili[2][intervallo[0]:intervallo[1]]), label='varianza')
-#         plt.xlim(min(xvec[intervallo[0]:intervallo[1]]), max(xvec[intervallo[0]:intervallo[1]]))
-#         plt.legend(loc='upper left')
-#         plt.subplot(313)
-#         plt.plot(xvec[intervallo[0]:intervallo[1]], np.sqrt(((Mediemobili[0][intervallo[0]:intervallo[1]]-Mediemobili[1][intervallo[0]:intervallo[1]])**2)/Mediemobili[2][intervallo[0]:intervallo[1]]), label='trigger')
-#         plt.xlim(min(xvec[intervallo[0]:intervallo[1]]),max(xvec[intervallo[0]:intervallo[1]]))
-#         #plt.legend(loc='upper left')
-#         #plt.show()
-#         plt.savefig(savedir+str(int(timestamps[j]))+'_triplot_resonant')
-#         plt.close()
+def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband):
+    sampling=44100
+    Mediemobili=rollingtrig(np.sqrt(ac.octavepass(segnale,centerband, fs=sampling, order=8, fraction=3)**2), math.floor((sampling*25)/centerband),math.floor(sampling/(2*centerband)))
+    xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
+    for j in range (0, len(timestamps)):
+        print(timestamps[j])
+        intervallo=(math.floor((timestamps[j]+deltat-1)*44100),math.floor((timestamps[j]+deltat+1)*44100))
+        signal=segnale[intervallo[0]:intervallo[1]]
+        plt.subplot(311)
+        plottaserietemporale(np.sqrt(signal**2),sampling)
+        plt.subplot(312)
+        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[0][intervallo[0]:intervallo[1]], label='pressione rms')
+        plt.plot(xvec[intervallo[0]:intervallo[1]],Mediemobili[1][intervallo[0]:intervallo[1]], label='fondo rms')
+        plt.plot(xvec[intervallo[0]:intervallo[1]],np.sqrt(Mediemobili[2][intervallo[0]:intervallo[1]]), label='varianza')
+        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]), max(xvec[intervallo[0]:intervallo[1]]))
+        plt.legend(loc='upper left')
+        plt.subplot(313)
+        plt.plot(xvec[intervallo[0]:intervallo[1]], np.sqrt(((Mediemobili[0][intervallo[0]:intervallo[1]]-Mediemobili[1][intervallo[0]:intervallo[1]])**2)/Mediemobili[2][intervallo[0]:intervallo[1]]), label='trigger')
+        plt.xlim(min(xvec[intervallo[0]:intervallo[1]]),max(xvec[intervallo[0]:intervallo[1]]))
+        #plt.legend(loc='upper left')
+        #plt.show()
+        plt.savefig(savedir+str(int(timestamps[j]))+'_triplot_resonant')
+        plt.close()
 
 def savetimestamps(dir, vec):
     vec=np.array(vec)
