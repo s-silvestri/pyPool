@@ -28,6 +28,7 @@ from sklearn.pipeline import Pipeline
 import seaborn as sns
 from mlxtend.plotting import plot_decision_regions
 from multiprocessing import Pool
+import tensorflow as tf
 windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -46,9 +47,9 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 if windows:
     loadir='C:/Users/acust/Desktop/misura/Long/'
-    loadir='E:/Buche\Misure Coltano 2/pint/unzipped/Run spezzate/run/'
+    #loadir='F:/Misure Coltano 2/pint/unzipped/Run spezzate/run/run1/'
     #loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run7/'
-    loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
+    #loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
     #loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
     loadir='F:/Misure navacchio 2/pint/unzipped/run_spezzate/'
     loadirph='F:/buche30/'
@@ -278,7 +279,7 @@ def plottaserietemporale(serie,campionamento):
     plt.legend(loc='upper right')
 
 def plottaspettrogramma(serie, N, sampling):
-    specgramma=plt.specgram(serie,Fs=sampling, window=wind, scale='dB', NFFT=N, cmap='jet')
+    specgramma=plt.specgram(serie,Fs=sampling, scale='dB', NFFT=N, cmap='jet')
     plt.yscale('symlog')
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('Time [sec]')
@@ -786,43 +787,33 @@ def campionadati(data, rangebello, rangebrutto, nsamples):
         secbrutto=(0.4+rangebrutto[0]+(rangebrutto[1]-rangebrutto[0])*rand)
         featbello=calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello)], 'bello')
         featbrutto=calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto)], 'brutto')
+        feat.append(featbello)
+        feat.append(featbrutto)
     featdf=pd.DataFrame(feat, index=np.arange(len(feat)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
-    featdf=featdf.dropna(how='all')
+    #featdf=featdf.dropna(how='all')
     featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']] = featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']].apply(pd.to_numeric)
     return (featdf)
 
-# cerca di usare Pool di multiprocessing per eseguire a 4 a 4 i job, descrizione nel quadernino. Per favore, abbi la decenza di passare una potenza del due come numero di oggetti per ora, altrimenti rompi tutto. Anzi, è già rotto
-def campionadatiparallelo(data, rangebello, rangebrutto, nsamples):
-    # sampeach=nsamples//mp.cpu_count()
-    # module=nsamples%mp.cpu_count()
-    sampeach=nsamples//4
-    module=nsamples%4
-    feat=np.zeros(nsamples)
-    feat=np.array(feat, dtype=object) #altrimenti non ci posso mettere dentro altri array
-    list0,list1,list2,list3=[],[],[],[]
-    work=([sampeach, 0, rangebello, rangebrutto,list0],[sampeach, 1, rangebello, rangebrutto,list1],[sampeach, 2, rangebello, rangebrutto,list2],[sampeach+module, 3, rangebello, rangebrutto,list3])
-    def work_log(work_data):
-        for j in range (0, work_data[0]):
-            rand=np.random.random()
-            rangebello=work_data[1]
-            rangebrutto=work_data[2]
-            secbello=(0.4+rangebello[0]+(rangebello[1]-rangebello[0])*rand)
-            secbrutto=(0.4+rangebrutto[0]+(rangebrutto[1]-rangebrutto[0])*rand)
-            featbello=calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello)], 'bello')
-            featbrutto=calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto)], 'brutto')
-            work_data[-1].append(featbello)
-            work_data[-1].append(featbrutto)
-    def pool_handler():
-        p=Pool(4)
-        p.map(work_log, work)
-    if __name__=='__main__':
-        pool_handler()
-    feat=list0+list1+list2+list3
-    featdf=pd.DataFrame(feat, index=np.arange(len(feat)), columns=('Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq', 'Label'))
-    featdf=featdf.dropna(how='all')
-    featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']] = featdf[['Total_power', 'Firstres', 'Ratio_1res', 'Ratio_2res', 'Ratio_3res', 'Ratio_hifreq']].apply(pd.to_numeric)
-    return (featdf)
-        
+def campionadativ2(data, rangebello, rangebrutto, nsamples):
+    feat=[]
+    for j in range (0, nsamples):
+        rand=np.random.random()
+        secbello=(0.4+rangebello[0]+(rangebello[1]-rangebello[0])*rand)
+        secbrutto=(0.4+rangebrutto[0]+(rangebrutto[1]-rangebrutto[0])*rand)
+        featbello1=calcolafeaturesipool(data[campioni(secbello-0.4): campioni(secbello-0.2)], 'bello')
+        featbrutto1=calcolafeaturesipool(data[campioni(secbrutto-0.4): campioni(secbrutto-0.2)], 'brutto')
+        featbello2=calcolafeaturesipool(data[campioni(secbello-0.3): campioni(secbello-0.1)], 'bello')
+        featbrutto2=calcolafeaturesipool(data[campioni(secbrutto-0.3): campioni(secbrutto-0.1)], 'brutto')
+        featbello3=calcolafeaturesipool(data[campioni(secbello-0.2): campioni(secbello)], 'bello')
+        featbrutto3=calcolafeaturesipool(data[campioni(secbrutto-0.2): campioni(secbrutto)], 'brutto')
+        featbello=np.concatenate((featbello1[:-1],featbello2[:-1],featbello3))
+        featbrutto=np.concatenate((featbrutto1[:-1],featbrutto2[:-1],featbrutto3))
+        feat.append(featbello)
+        feat.append(featbrutto)
+        featdf=pd.DataFrame(feat, index=np.arange(len(feat)), columns=('Total_power1', 'Firstres1', 'Ratio_1res1', 'Ratio_2res1', 'Ratio_3res1', 'Ratio_hifreq1', 'Total_power2', 'Firstres2', 'Ratio_1res2', 'Ratio_2res2', 'Ratio_3res2', 'Ratio_hifreq2', 'Total_power3', 'Firstres3', 'Ratio_1res3', 'Ratio_2res3', 'Ratio_3res3', 'Ratio_hifreq3', 'Label'))
+    #featdf=featdf.dropna(how='all')
+    featdf[['Total_power1', 'Firstres1', 'Ratio_1res1', 'Ratio_2res1', 'Ratio_3res1', 'Ratio_hifreq1', 'Total_power2', 'Firstres2', 'Ratio_1res2', 'Ratio_2res2', 'Ratio_3res2', 'Ratio_hifreq2', 'Total_power3', 'Firstres3', 'Ratio_1res3', 'Ratio_2res3', 'Ratio_3res3', 'Ratio_hifreq3']] = featdf[['Total_power1', 'Firstres1', 'Ratio_1res1', 'Ratio_2res1', 'Ratio_3res1', 'Ratio_hifreq1', 'Total_power2', 'Firstres2', 'Ratio_1res2', 'Ratio_2res2', 'Ratio_3res2', 'Ratio_hifreq2', 'Total_power3', 'Firstres3', 'Ratio_1res3', 'Ratio_2res3', 'Ratio_3res3', 'Ratio_hifreq3']].apply(pd.to_numeric)
+    return (featdf)        
         
 #lancia calcolafeatures su un intervallo largo dividendolo in pezzi della stessa larghezza, specificata in input in secondi (intervalli). Returna un array di array, vuole la classificazione della pavimentazione già fatta dall'utente. Ricorda che deve essere una stringa.
 def arrayfeatures(data, intervalli, classificazione):
@@ -863,7 +854,7 @@ def wrapandas (df1,df2):
 #         b.append(df)
     
 def nearest(dataset):
-    X=dataset.drop(columns=['Label'])
+    X=dataset.drop(columns=['Label','Firstres','Ratio_1res','Ratio_3res','Ratio_2res'])
     print (X)
     y=dataset['Label'].values
     X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.7, random_state=42)
@@ -875,33 +866,32 @@ def nearest(dataset):
     return (nca_pipe)
 
  
-# define bounds of the domain
-min1, max1 = X['Total_power'].min()-1, X['Total_power'].max()+1
-min2, max2 = X['Ratio_2res'].min()-1, X['Ratio_2res'].max()+1
-#uniform range across the dmain
-x1grid = arange(min1, max1, (max1-min1)/500)
-x2grid = arange(min2, max2, (max2-min2)/500)
-# create all of the lines and rows of the grid
-xx, yy = np.meshgrid(x1grid, x2grid)
-# flatten each grid to a vector
-r1, r2 = xx.flatten(), yy.flatten()
-r1, r2 = r1.reshape((len(r1), 1)), r2.reshape((len(r2), 1))
-# horizontal stack vectors to create x1,x2 input for the model
-grid =np. hstack((r1,r2))
-# make predictions for the grid
-yhat = classificatore.predict(grid)
-# reshape the predictions back into a grid
-zz = yhat.reshape(xx.shape)
-ZZ=zz=='brutto'
-# plot the grid of x, y and z values as a surface
-plt.contourf(xx, yy, ZZ,cmap='Paired')
-#plt.contour(xx, yy, ZZ,cmap='Paired')
-
-sns.scatterplot(x="Total_power", y="Ratio_2res", hue='Label', data=testset)
-#plt.xlim(min(xx[0]), max(xx[0]))
-#plt.ylim(min(yy[0]), max(yy[-1]))
-plt.show()
-    
+# # define bounds of the domain
+# min1, max1 = X['Total_power'].min()-1, X['Total_power'].max()+1
+# min2, max2 = X['Ratio_hifreq'].min()-1, X['Ratio_hifreq'].max()+1
+# #uniform range across the dmain
+# x1grid = arange(min1, max1, (max1-min1)/500)
+# x2grid = arange(min2, max2, (max2-min2)/500)
+# # create all of the lines and rows of the grid
+# xx, yy = np.meshgrid(x1grid, x2grid)
+# # flatten each grid to a vector
+# r1, r2 = xx.flatten(), yy.flatten()
+# r1, r2 = r1.reshape((len(r1), 1)), r2.reshape((len(r2), 1))
+# # horizontal stack vectors to create x1,x2 input for the model
+# grid =np.hstack((r1,r2))
+# # make predictions for the grid
+# yhat = classificatore.predict(grid)
+# # reshape the predictions back into a grid
+# zz = yhat.reshape(xx.shape)
+# ZZ=zz=='brutto'
+# # plot the grid of x, y and z values as a surface
+# plt.contourf(xx, yy, ZZ,cmap='Paired')
+# #plt.contour(xx, yy, ZZ,cmap='Paired')
+# sns.scatterplot(x="Total_power", y="Ratio_hifreq", hue='Label', data=dataset)
+# #plt.xlim(min(xx[0]), max(xx[0]))
+# #plt.ylim(min(yy[0]), max(yy[-1]))
+# plt.show()
+#     
 #dataset.to_csv(r'F:/Misure navacchio 2/pint/unzipped/run_spezzate/dataset.csv')
 
 
