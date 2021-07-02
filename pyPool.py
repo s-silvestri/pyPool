@@ -29,6 +29,8 @@ import seaborn as sns
 from mlxtend.plotting import plot_decision_regions
 from multiprocessing import Pool
 import tensorflow as tf
+from scipy.io import wavfile
+import soundfile as sf
 windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
@@ -53,11 +55,20 @@ if windows:
     #loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
     loadir='F:/Misure navacchio 2/pint/unzipped/run_spezzate/'
     loadirph='F:/buche30/'
+    heihei='F:/Reggio/PIPPO_FUORI_ALBERGO/wav/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
-filelist=[]
+polli=[]
+for filename in os.listdir(heihei):
+    if filename.endswith(".wav"):
+        polli.append(heihei+filename)
+pollo=sf.read(polli[-1])
+pollo=np.array(pollo).tolist()
+pollo[0]*=813.5330
+pollo=np.array(pollo)
 
+filelist=[]
 for filename in os.listdir(loadir):
     if filename.endswith(".wav"):
         filelist.append(loadir+filename)
@@ -346,8 +357,8 @@ def plottayule(data,intervallo):
     wind=sp.signal.blackmanharris(campioni(intervallo[1])-campioni(intervallo[0]))
     #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
     data=data[campioni(intervallo[0]):campioni(intervallo[1])]
-    N = 8192
-    order=500
+    N = 16384
+    order=1000
     p = pyule(data*wind, order, NFFT=N, sampling=44100)
     #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
     p()
@@ -864,6 +875,16 @@ def nearest(dataset):
     nca_pipe.fit(X_train, y_train)
     print(nca_pipe.score(X_test, y_test))
     return (nca_pipe)
+
+# # Crea un vettore che campiona le frequenze delle prime risonanze 
+# primeres=[]
+# for j in range (1,101):
+#     a=plottayule(prova[1],(10+(j-1)*0.4, 10+j*0.4))
+#     picco=sp.signal.find_peaks(a.psd)[0]
+#     primeres.append(picco[picco>160/2.7][0]*2.691650390625)
+#     plt.close()
+#     print (j)
+    
 
  
 # # define bounds of the domain
