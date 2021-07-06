@@ -48,12 +48,12 @@ savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_sp
 
 
 if windows:
-    loadir='C:/Users/acust/Desktop/misura/Long/'
+    #loadir='C:/Users/acust/Desktop/misura/Long/'
     #loadir='F:/Misure Coltano 2/pint/unzipped/Run spezzate/run/run1/'
     #loadir='F:/pint/Misure Coltano 2/pint/unzipped/Run spezzate/run/run7/'
-    #loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
+    loadir='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/'
     #loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
-    loadir='F:/Misure navacchio 2/pint/unzipped/run_spezzate/'
+    #loadir='F:/Misure navacchio 2/pint/unzipped/run_spezzate/'
     loadirph='F:/buche30/'
     heihei='F:/Reggio/PIPPO_FUORI_ALBERGO/wav/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
@@ -339,15 +339,35 @@ def plottapsdsbucata(data,intervallo):
     # sample spacing
     #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
     #fig, ax = plt.subplots()
-    N=8192
+    N=4096#8192
     wind=sp.signal.blackmanharris(N)
-    plt.psd(data, NFFT=N, Fs=44100, window=wind, detrend=None)
+    a=plt.psd(data, NFFT=N, Fs=44100, window=wind, detrend=None)
     plt.xscale('log')
     #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
     plt.xlim(100,12800)
     #plt.xlim(1,100)
     plt.xlabel('Frequency[Hz]')
     plt.show()
+    return (a)
+    
+def plottapsdbucata(data,intervallo):
+    sampling=44100
+    intervallo=np.array(intervallo)
+    data=data[campioni(intervallo[0]):campioni(intervallo[1])]
+    # Number of samplepoints
+    N = len(data)
+    # sample spacing
+    #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
+    #fig, ax = plt.subplots()
+    N=4096#8192
+    wind=sp.signal.blackmanharris(N)
+    a=plt.psd(data, NFFT=N, Fs=44100, window=wind, detrend=None)
+    plt.xscale('log')
+    #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
+    plt.xlim(100,12800)
+    #plt.xlim(1,100)
+    plt.xlabel('Frequency[Hz]')
+    return (a)
     
 
 #Plotta l'autoregressione yule walker nell'intervallo specificato in secondi, da indicare come vettore
@@ -357,8 +377,8 @@ def plottayule(data,intervallo):
     wind=sp.signal.blackmanharris(campioni(intervallo[1])-campioni(intervallo[0]))
     #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
     data=data[campioni(intervallo[0]):campioni(intervallo[1])]
-    N = 16384
-    order=1000
+    N = 8192
+    order=500
     p = pyule(data*wind, order, NFFT=N, sampling=44100)
     #psd = arma2psd(A=a, B=b, rho=rho, sides='centerdc', norm=True)
     p()
@@ -691,7 +711,24 @@ def calcolafeaturesmasino(data, tipo):
     Primotoro=powerbandyw(data,175,245)
     a=np.array((Power,Power5k,Ratio5k,Ratio1res,Primotoro,tipo))
     return(a)
-    
+
+
+def calcolafeatimestamp (data, ts, delta):
+    ts=ts-delta
+    a=[]
+    for j in range (0, len(ts)):
+        print (ts[j])
+        feat1=calcolafeaturesipool(data[campioni(ts[j]-0.2): campioni(ts[j])], str(ts[j]+delta))
+        feat2=calcolafeaturesipool(data[campioni(ts[j]-0.1): campioni(ts[j]+0.1)], str(ts[j]+delta))
+        feat3=calcolafeaturesipool(data[campioni(ts[j]): campioni(ts[j]+0.2)], str(ts[j]+delta))
+        feat=np.concatenate((feat1[:-1],feat2[:-1],feat3))
+        a.append(feat)
+    adf=pd.DataFrame(a, index=np.arange(len(a)), columns=('Total_power1', 'Firstres1', 'Ratio_1res1', 'Ratio_2res1', 'Ratio_3res1', 'Ratio_hifreq1', 'Total_power2', 'Firstres2', 'Ratio_1res2', 'Ratio_2res2', 'Ratio_3res2', 'Ratio_hifreq2', 'Total_power3', 'Firstres3', 'Ratio_1res3', 'Ratio_2res3', 'Ratio_3res3', 'Ratio_hifreq3', 'Label'))
+    return adf
+
+
+
+
 def calcolafeaturesipool(data, tipo):
     a=getyule(data, (0,secondi(len(data))))
     psd=a.psd
@@ -875,6 +912,19 @@ def nearest(dataset):
     nca_pipe.fit(X_train, y_train)
     print(nca_pipe.score(X_test, y_test))
     return (nca_pipe)
+    
+def psdogramma(segnale, secondo):
+    a=[]
+    step=0.1
+    length=64
+    for j in range (0,length):
+        tempo=secondo+(j-math.floor(length/2))*step
+        print (tempo)
+        psd=plottapsdbucata(prova[1],(tempo,tempo+step))
+        a.append(np.log10(psd[0][2:64+2]))
+        plt.close()
+    return (a, psd[1][2:64+2])
+    
 
 # # Crea un vettore che campiona le frequenze delle prime risonanze 
 # primeres=[]

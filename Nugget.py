@@ -12,11 +12,11 @@ from sklearn.mixture import BayesianGaussianMixture
 loadir="F:/"
 
 #data=pd.read_csv(loadir+'dataset_millenavacchio2.csv')
-data=pd.read_csv('F:/tridataset.csv')
-data=data.drop(columns=['Unnamed: 0'])
-n_clusters=3
+#data=pd.read_csv('F:/tridataset.csv')
+#data=data.drop(columns=['Unnamed: 0'])
+n_clusters=2
 #col=data.loc[: , "Total_power1","Total_power2", "Total_power3"]
-data.mean()
+#data.mean()
 data['Total_power_avg'] = data[["Total_power1","Total_power2", "Total_power3"]].mean(axis=1)
 data['Ratio1res_avg'] = data[["Ratio_1res1","Ratio_1res2", "Ratio_1res3"]].mean(axis=1)
 data['Ratiohifreq_avg'] = data[["Ratio_hifreq1","Ratio_hifreq2", "Ratio_hifreq2"]].mean(axis=1)
@@ -39,10 +39,10 @@ X=data.drop(columns=['Label'])
 y=data['Label'].values
 X_train, X_test, y_train, y_test=train_test_split(X,y, stratify=y, test_size=0.7, random_state=1987)
 good_init=np.array([[50,80,6],[400,25,2.5]])
-kmeans = KMeans(n_clusters=n_clusters, n_init=20, n_jobs=4)
+kmeans = KMeans(n_clusters=n_clusters, n_init=50, n_jobs=4)
 y_pred_kmeans = kmeans.fit_predict(X)
 dbscan = KMeans(n_clusters=n_clusters, n_init=20, n_jobs=4)
-y_pred_kmeans = kmeans.fit_predict(X)
+y_pred_kmeans = KMeans.fit_predict(X)
 
 gm = GaussianMixture(n_components=2, n_init=10)
 gm.fit(X)
