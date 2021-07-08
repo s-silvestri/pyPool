@@ -916,12 +916,14 @@ def nearest(dataset):
 def psdogramma(segnale, secondo):
     a=[]
     step=0.1
-    length=64
+    length=2000
+    IRF=plottapsdbucata(segnale, (0, len(segnale)))
+    plt.close()
     for j in range (0,length):
         tempo=secondo+(j-math.floor(length/2))*step
         print (tempo)
         psd=plottapsdbucata(prova[1],(tempo,tempo+step))
-        a.append(np.log10(psd[0][2:64+2]))
+        a.append(np.log10(psd[0][2:64+2]/IRF[0][2:64+2]))
         plt.close()
     return (a, psd[1][2:64+2])
     
