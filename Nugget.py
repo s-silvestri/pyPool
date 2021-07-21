@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.mixture import GaussianMixture
 from sklearn.mixture import BayesianGaussianMixture
 
+
 #Classificatori forti: Total power average, Ratio  1res average, Ratiohifreq_average (tra 1-2 e 0), Ci sono evoluzioni diverse di Ratio_1res e ratio_hifreq, tendenzialmente che crescono alla fine nelle due classi diverse, probabilmente il punto è che trattandosi di segnali comunque non "fissi" nelle classi 2 e 3 ci metta l'ingresso e l'uscita dalla strada brutta. Con 4 classi ti identifica tutto, ma l'algoritmo è molto instabile e da classificazioni diverse da una volta all'altra, probabilmente fa overfitting. Ci vogliono più dari.
 loadir="F:/"
 
@@ -71,5 +72,16 @@ print (kmeans.cluster_centers_)
 # y_pred_kmeans = kmeans.fit_predict(x)
 # # Evaluate the K-Means clustering accuracy.
 # metrics.acc(y, y_pred_kmeans)
+
+
+import numpy as np
+import pandas as pd
+
+import tensorflow as tf
+
+from tensorflow import feature_column
+from tensorflow.keras import layers
+from sklearn.model_selection import train_test_split
+
 
 

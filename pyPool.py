@@ -31,7 +31,7 @@ from multiprocessing import Pool
 import tensorflow as tf
 from scipy.io import wavfile
 import soundfile as sf
-windows=True
+windows=False
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
     samplerate, data = read(file)
@@ -40,11 +40,11 @@ def loadwav(file):
     return (samplerate, data*scale) 
 
 #---------------------- Qui ci sono un po' di indirizzi di cartelle da cui volendo si caricano facilmente i file: ognuno le aggiorni con le sue folder preferite, idealmente tutti i file sono in una cartella poi vengono caricate in un vettore filelist[].
-#loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/'
-loadir='/media/kibuzo/6317E4611EC4DD5F/Buche/misure_a_giro_ospedaletto_2/Pint/unzipped/run_spezzate/'
+loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio 2/pint/unzipped/'
+# loadir='/media/kibuzo/6317E4611EC4DD5F/Buche/misure_a_giro_ospedaletto_2/Pint/unzipped/run_spezzate/'
 
-savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
-savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure Coltano/pint/unzipped/run_spezzate/Untriggered/Gronchi/'
+# savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio/gopro/00082/triggered/plot/'
+savedir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio 2/pint/unzipped/Untriggered/'
 
 
 if windows:
@@ -59,14 +59,19 @@ if windows:
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
-polli=[]
-for filename in os.listdir(heihei):
-    if filename.endswith(".wav"):
-        polli.append(heihei+filename)
-pollo=sf.read(polli[-1])
-pollo=np.array(pollo).tolist()
-pollo[0]*=813.5330
-pollo=np.array(pollo)
+    polli=[]
+    for filename in os.listdir(heihei):
+        if filename.endswith(".wav"):
+            polli.append(heihei+filename)
+    pollo=sf.read(polli[-1])
+    pollo=np.array(pollo).tolist()
+    pollo[0]*=813.5330
+    pollo=np.array(pollo)
+    
+    filelistph=[]
+    for filename in os.listdir(loadirph):
+        if filename.endswith(".wav"):
+            filelistph.append(loadirph+filename)
 
 filelist=[]
 for filename in os.listdir(loadir):
@@ -75,10 +80,6 @@ for filename in os.listdir(loadir):
 prova=loadwav(filelist[-1])
 #test=loadwav(filelist[-3])
 
-filelistph=[]
-for filename in os.listdir(loadirph):
-    if filename.endswith(".wav"):
-        filelistph.append(loadirph+filename)
     
 #provabrutto=loadwav(filelist[2])
 #encoder=pd.read_csv(loadir+'vel_secondo.csv')
@@ -913,21 +914,71 @@ def nearest(dataset):
     print(nca_pipe.score(X_test, y_test))
     return (nca_pipe)
     
-def psdogramma(segnale, secondo):
+def psdnorm (segnale):
+    return(plottapsdbucata(segnale, (0, len(segnale))))
+    
+def psdogramma(segnale, secondo, IRF):
     a=[]
-    step=0.1
-    length=2000
-    IRF=plottapsdbucata(segnale, (0, len(segnale)))
+    #step*length=n° secondi
+    step=0.08
+    length=64
+    #IRF=plottapsdbucata(segnale, (0, len(segnale)))
     plt.close()
     for j in range (0,length):
         tempo=secondo+(j-math.floor(length/2))*step
         print (tempo)
-        psd=plottapsdbucata(prova[1],(tempo,tempo+step))
+        psd=plottapsdbucata(segnale,(tempo,tempo+step))
         a.append(np.log10(psd[0][2:64+2]/IRF[0][2:64+2]))
         plt.close()
     return (a, psd[1][2:64+2])
     
+def iniziopsod (segnale):
+    IRF=psdnorm(segnale)
+    psog=psdogramma(segnale, 32*0.08, IRF)
+    for j in range (0, 32):
+        plt.imshow(np.transpose(psog[0]), vmin=-6, vmax=3)
+        #plt.ylim((max(psog[1]/10), min(psog[1]/10)))
+        plt.axvline(x=j, linestyle='dotted', color='r')
+        plt.savefig(savedir+'psdogrammi/'+str(j)+'.png')
+        plt.close()
 
+# def psdopo (segnale, lowlim, ulim, IRF):
+#     for j in range (np.int(math.floor(lowlim/0.08)),np.int(math.floor(ulim/0.08))):
+#         psog=psdogramma(segnale, j*0.08, IRF)
+#         plt.imshow(np.transpose(psog[0]), vmin=-6, vmax=3)
+#         plt.axvline(x=32, linestyle='dotted', color='r')
+#         plt.savefig(savedir+'psdogrammi/'+str(j)+'.png')
+#         plt.close()
+def psdopo (segnale, lowlim, ulim, IRF):
+    ciclo0=np.int((lowlim)/0.08)+1
+    ciclo1=np.int(((ulim)/0.08))+1
+    centropsd=((lowlim/0.08)-31)*0.08
+    psog=psdogramma(segnale, ((centropsd)), IRF)[0]
+    plt.imshow(np.transpose(psog), vmin=-6, vmax=3)
+    plt.axvline(x=32, linestyle='dotted', color='r')
+    plt.savefig(savedir+'psdogrammi/'+str(np.int(math.floor(centropsd/0.08)))+'.png')
+    print ('salvato il primo psdogramma in intervallo '+str ((centropsd/0.08)-32)+' - '+ str((centropsd/0.08)+32))
+    plt.close()
+    print ('Inizia il ciclo da '+ str (ciclo0-32) + ' a ' +str(ciclo1-32))
+    for j in range (ciclo0,ciclo1): #se 5.12-6 va da 64 a 75, 
+        current=np.int(j-32)
+        final=j
+        psog=psog[1:] #Toglie il primo elemento
+        psdpiu=plottapsdbucata(segnale,((final)*0.08, (final+1)*0.08)) # genera il nuovo elemento da mettere in coda (final+1)
+        print ('Sto inserendo la colonna relativa al secondo '+ str(final*0.08) + ' al ' + str((final+1)*0.08))
+        plt.close()
+        psdpiu2=np.log10(psdpiu[0][2:64+2]/irf[0][2:64+2])
+        psog=np.transpose(np.c_[ np.transpose(psog), psdpiu2 ])
+        plt.imshow(np.transpose(psog), vmin=-6, vmax=3)
+        plt.axvline(x=32, linestyle='dotted', color='r')
+        plt.savefig(savedir+'psdogrammi/'+str(current+1)+'.png') #lo salva come final +1 perché è final con una colonna in piu
+        #print ('sto salvando il file ' +str(current+1) + ' per intervallo sopra indicato')
+        plt.close()
+    print ('finito al secondo ' +str ((final+1)*0.08))
+    
+# Deduzioni dal video: la banda sotto la prima risonanza si conferma buona per eventi tipo cracking (V). I tombini eccitano anche frequenze più alte, ma tendono a essere eventi isolati, mentre le buche persistono alte per qualche colonna. Zone di coccodrilli profondi tendono a eccitare un po' tutta la banda a bassa frequenza (VVV). Ha bisogno di almeno 3 segmenti da 0.08 e di almeno 10-600 Hz, nel psdogramma corrisponde a 192 punti totali: ma come andrebbe con i terzi d'ottava?
+        
+    
 # # Crea un vettore che campiona le frequenze delle prime risonanze 
 # primeres=[]
 # for j in range (1,101):
