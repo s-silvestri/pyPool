@@ -31,13 +31,22 @@ from multiprocessing import Pool
 import tensorflow as tf
 from scipy.io import wavfile
 import soundfile as sf
-windows=False
+windows=True
 #loadwav carica file e restituisce un vettore dove il primo elemento è la frequenza di sampling, il secondo è la serie numerica. Il numero di conversione serve per passare da canali adc a pressione (canali adc 32767 e pressione in pascal 813.5330)
 def loadwav(file):
     samplerate, data = read(file)
     #Definisco il fattore di scala della traccia audio. 32767 sono i canali adc da convertire in [-1,1] per un 16 bit, mentre 813 è per passare in pressione. Se usassi tensorflow o matlab basta 813
     scale=813.5330/32767
     return (samplerate, data*scale) 
+
+#Name should include subfolder, if desired, but not extension (will be wav) 
+#tagliala ad almeno 1.6 secondi per la NN di Gloria
+def savewav(input, name, rate, secondo1, secondo2, savedir='F:/tagliati/'):
+    start=np.int(secondo1*rate)
+    stop=np.int(secondo2*rate)
+    sezione=input[start:stop]
+    wavfile.write(savedir+str(name)+'.wav', rate, sezione)
+    
 
 #---------------------- Qui ci sono un po' di indirizzi di cartelle da cui volendo si caricano facilmente i file: ognuno le aggiorni con le sue folder preferite, idealmente tutti i file sono in una cartella poi vengono caricate in un vettore filelist[].
 loadir='/media/kibuzo/Gatto Silvestro/Buche/Misure navacchio 2/pint/unzipped/'
@@ -55,7 +64,7 @@ if windows:
     #loadir='E:/Buche\Misure Coltano/pint/unzipped/run_spezzate/'
     #loadir='F:/Misure navacchio 2/pint/unzipped/run_spezzate/'
     loadirph='F:/buche30/'
-    heihei='F:/Reggio/PIPPO_FUORI_ALBERGO/wav/'
+    heihei='F:/Reggio/Rosarno_GT/wav/'
     savedir='c:/Users/acust/Desktop/misura/processed/'
 
 #Questo mette tutti i nomi dei file in un apposito vettore.
@@ -63,7 +72,7 @@ if windows:
     for filename in os.listdir(heihei):
         if filename.endswith(".wav"):
             polli.append(heihei+filename)
-    pollo=sf.read(polli[-1])
+    pollo=sf.read(polli[1])
     pollo=np.array(pollo).tolist()
     pollo[0]*=813.5330
     pollo=np.array(pollo)
@@ -140,8 +149,9 @@ def fittaseno(data):
         
     
 #prendo tutto in secondi, per ora assumo comportamento virtuoso dell'operatore, cioè le buche non devono essere sul bordo (intervallo di mezzo secondo), né fuori. Metti anche un check sulle buche, se mi passa un array vuoto non devo fare niente.
-def toglibuche(serie, inizio, fine, buche):
-    xvec=np.linspace(inizio,fine,num=math.floor((fine-inizio)*44100))
+def toglibuche(serie, inizio, fine, buche, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100)
+    xvec=np.linspace(inizio,fine,num=math.floor((fine-inizio)*sampling))
     if np.array(buche).size==0:
         return(xvec, serie)
     buche=np.array(buche)
@@ -149,7 +159,7 @@ def toglibuche(serie, inizio, fine, buche):
     buche=buche-inizio
     #aggiungere un controllo su buca prima di inizio serie
     s=(buche[0]-0.5)
-    N=math.floor(44100*s)
+    N=math.floor(sampling*s)
     #wind=signal.windows.hann(N)
     wind=1
     senzabuche=serie[0:campioni(buche[0]-0.5)]
@@ -165,7 +175,7 @@ def toglibuche(serie, inizio, fine, buche):
         s=sup-inf
         #wind=signal.windows.hann(N)
         wind=1
-        N=math.floor(44100*s)
+        N=math.floor(sampling*s)
         senzabuche=np.concatenate((senzabuche,serie[infC:supC]*wind))
         print ('removing hole number at second '+ str(inf+0.5))
         xtime=np.concatenate((xtime,xvec[infC:supC]))
@@ -271,9 +281,9 @@ def rollingtrig(serie, lungo, corto):
     smallmean=seriepd.rolling(corto).median()
     return (smallmean.to_numpy(), largemean.to_numpy(), largevar.to_numpy())
 
-def terzottava(segnale, centrobanda):
+def terzottava(segnale, centrobanda, **kwargs):
     #centeroctave=1000*2.**(np.arange(-7,7))
-    sampling=44100
+    sampling = kwargs.get( 'Fs', 44100)
     filtrato=ac.octavepass(center=centrobanda, fs=sampling, fraction=3, signal=segnale, order=8)
     return (filtrato)
 
@@ -290,15 +300,17 @@ def plottaserietemporale(serie,campionamento):
     plt.xlim(min(xaxis),max(xaxis))
     plt.legend(loc='upper right')
 
-def plottaspettrogramma(serie, N, sampling):
+def plottaspettrogramma(serie, N, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100)
     specgramma=plt.specgram(serie,Fs=sampling, scale='dB', NFFT=N, cmap='jet')
+    plt.axis(ymin=50)
     plt.yscale('symlog')
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('Time [sec]')
     return (specgramma)
 
-def plottaspettro(data):
-    sampling=44100
+def plottaspettro(data, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100)
     # Number of samplepoints
     N = len(data)
     # sample spacing
@@ -313,8 +325,8 @@ def plottaspettro(data):
     plt.xlabel('Frequency[Hz]')
     plt.show()
 
-def plottaspettrosbucato(data,intervallo):
-    sampling=44100
+def plottaspettrosbucato(data,intervallo, kwargs):
+    sampling = kwargs.get( 'Fs', 44100)
     intervallo=np.array(intervallo)
     data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
     # Number of samplepoints
@@ -331,49 +343,36 @@ def plottaspettrosbucato(data,intervallo):
     plt.xlabel('Frequency[Hz]')
     plt.show()
 
-def plottapsdsbucata(data,intervallo):
-    sampling=44100
+def plottapsdsbucata(data,intervallo, Fs=44100, **kwargs):
+    N = kwargs.get('N', 4096)
+    sampling = Fs
     intervallo=np.array(intervallo)
     data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
-    # Number of samplepoints
-    N = len(data)
-    # sample spacing
-    #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
-    #fig, ax = plt.subplots()
-    N=4096#8192
-    wind=sp.signal.blackmanharris(N)
-    a=plt.psd(data, NFFT=N, Fs=44100, window=wind, detrend=None)
+    wind=sp.signal.blackmanharris(N) #Ma va messo lungo quanto i dati o quanto la larghezza in frequenza?
+    a=plt.psd(data, NFFT=int(N), Fs=sampling, window=wind, detrend=None)
     plt.xscale('log')
-    #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
     plt.xlim(100,12800)
-    #plt.xlim(1,100)
     plt.xlabel('Frequency[Hz]')
-    plt.show()
     return (a)
     
-def plottapsdbucata(data,intervallo):
-    sampling=44100
+def plottapsdbucata(data,intervallo, Fs=44100, **kwargs):
+    N = kwargs.get('N', 4096)
+    sampling = Fs
     intervallo=np.array(intervallo)
-    data=data[campioni(intervallo[0]):campioni(intervallo[1])]
-    # Number of samplepoints
-    N = len(data)
-    # sample spacing
-    #y = np.sin(50.0 * 2.0*np.pi*x) + 0.5*np.sin(80.0 * 2.0*np.pi*x)
-    #fig, ax = plt.subplots()
-    N=4096#8192
-    wind=sp.signal.blackmanharris(N)
-    a=plt.psd(data, NFFT=N, Fs=44100, window=wind, detrend=None)
+    data=data[np.int(intervallo[0]*sampling): np.int(intervallo[1]*sampling)] #Achtung: se prendi un pezzo troppo lungo se lo taglia da solo
+    if  np.int(intervallo[1]*sampling)-np.int(intervallo[0]*sampling)>len(data):
+        print ('Warning: vector overflow, results may be unreliable')
+    wind=sp.signal.blackmanharris(N) #Ma va messo lungo quanto i dati o quanto la larghezza in frequenza?
+    a=plt.psd(data, NFFT=N, Fs=sampling, window=wind, detrend=None)
     plt.xscale('log')
-    #ax.semilogx(xf, 2.0/N * np.abs(yf[:N//2]))
     plt.xlim(100,12800)
-    #plt.xlim(1,100)
     plt.xlabel('Frequency[Hz]')
     return (a)
     
 
 #Plotta l'autoregressione yule walker nell'intervallo specificato in secondi, da indicare come vettore
-def plottayule(data,intervallo):
-    sampling=44100
+def plottayule(data,intervallo, Fs=44100, **kwargs):
+    sampling = Fs   
     intervallo=np.array(intervallo)
     wind=sp.signal.blackmanharris(campioni(intervallo[1])-campioni(intervallo[0]))
     #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
@@ -390,8 +389,8 @@ def plottayule(data,intervallo):
     #plt.xlim(1,20)
     #plt.show()
     
-def getyule(data,intervallo):
-    sampling=44100
+def getyule(data,intervallo, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100)    
     intervallo=np.array(intervallo)
     wind=sp.signal.blackmanharris(campioni(intervallo[1])-campioni(intervallo[0]))
     #data=sbucastrada(data,(intervallo[0],intervallo[1]))[1]
@@ -451,11 +450,11 @@ def poweratio(data, freq1, freq2, freq3, freq4):
     return integrale/integrale1
     
 #Fa la cwt del segnale. Non superare i 2 secondi e non superare i 20 bin logaritmici. Mi raccomando di fare attenzione alla scala verticale che è brutta perché una logaritmica artificiale in base 10, cioè sull'asse leggi il valore dell'esponente
-def wavelet (sig, nlogbin):
-    fsampling=44100
-    widths=np.logspace(np.log10(fsampling/5000),np.log10(fsampling/10), num=nlogbin)
+def wavelet (sig, nlogbin, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100)    
+    widths=np.logspace(np.log10(fsampling/5000),np.log10(sampling/10), num=nlogbin)
     cwtmatr, freqs = pywt.cwt(sig, widths, 'cmorl3-1')
-    extent=[(np.min(1/(widths/44100))), (np.max(1/(widths/44100)))]
+    extent=[(np.min(1/(widths/sampling))), (np.max(1/(widths/sampling)))]
     logextent=np.log10(extent)
     fig, (ax) = plt.subplots()
     ax.yaxis.set_major_locator(plt.MaxNLocator(len(widths)))
@@ -548,8 +547,8 @@ def saveyw(segnale, deltat, savedir, timestamps):
         plt.savefig(savedir+str(int(timestamps[j]))+'_YW_psd')
         plt.close()
 
-def savetriplot(segnale, deltat, savedir, timestamps):
-    sampling=44100
+def savetriplot(segnale, deltat, savedir, timestamps, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100) 
     Mediemobili=rollingtrig(np.sqrt(segnale**2), 10000,200)
     xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
     for j in range (0, len(timestamps)):
@@ -572,8 +571,8 @@ def savetriplot(segnale, deltat, savedir, timestamps):
         plt.savefig(savedir+str(int(timestamps[j]))+'_triplot')
         plt.close()
 
-def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband):
-    sampling=44100
+def savetriplotresonant(segnale, deltat, savedir, timestamps, centerband, **kwargs):
+    sampling = kwargs.get( 'Fs', 44100) 
     Mediemobili=rollingtrig(np.sqrt(ac.octavepass(segnale,centerband, fs=sampling, order=8, fraction=3)**2), math.floor((sampling*25)/centerband),math.floor(sampling/(2*centerband)))
     xvec=np.linspace(0, len(Mediemobili[0])/sampling, num=len(Mediemobili[0]))
     for j in range (0, len(timestamps)):
@@ -600,9 +599,9 @@ def savetimestamps(dir, vec):
     vec=np.array(vec)
     np.savetxt(dir+'Timestamps.txt', vec.astype(int), fmt='%i')
 
-def terzitrigger(segnale, sampling, centerband):
+def terzitrigger(segnale, sampling, centerband, **kwargs):
     trigband=[]
-    sampling=44100
+    sampling = kwargs.get( 'Fs', 44100) 
     #a=np.arange(-19,19)
     #centerbands=1000*(2**(a/3))
     #for j in range (0,len(centerbands)):
@@ -889,6 +888,28 @@ def wrapandas (df1,df2):
     df.set_index(np.arange(len(df1)+len(df2)))
     df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']] = df[['Total_power', 'Power5k', 'Ratio5k', 'Ratio_2res', 'Power_firstres']].apply(pd.to_numeric)
     return(df)
+    
+def plottapsdogramma(segnale, Fs=44100):
+    res=1 #Aumenta in modo moltiplicativo il numero di punti della psd, quindi in linea di principio la risoluzione spettrale
+    plt.close()
+    a=[]
+    #sampling = kwargs.get( 'Fs', 44100) 
+    IRF=psdnorm(segnale, N=4096*res, Fs=Fs)
+    #step*length=n° secondi
+    step=0.1
+    length=math.floor(len(segnale)/(step*sampling))
+    #IRF=plottapsdbucata(segnale, (0, len(segnale)))
+    plt.close()
+    for j in range (0,length):
+        tempo=j*step#secondo+(j-math.floor(length/2))*step
+        #print (tempo)
+        psd=plottapsdbucata(segnale,(tempo,tempo+step), N=4096*res, Fs=sampling)
+        a.append(np.log10((psd[0][2*res:64*res+2*res]/IRF[0][2*res:64*res+2*res])))
+        plt.close()
+    plt.imshow(np.transpose(a), aspect='auto', vmin=-6, vmax=3)
+    plt.colorbar()
+    plt.show()
+    return (a, psd[1][2*res:64*res+2*res])
 
 # bello=arrayfeatures(prova[1][campioni(50):campioni(70)], 0.4, 'bello')
 # brutto=arrayfeatures(prova[1][campioni(95):campioni(115)], 0.4, 'brutto')
@@ -914,32 +935,35 @@ def nearest(dataset):
     print(nca_pipe.score(X_test, y_test))
     return (nca_pipe)
     
-def psdnorm (segnale):
-    return(plottapsdbucata(segnale, (0, len(segnale))))
+def psdnorm (segnale, Fs=44100, **kwargs):
+    N = kwargs.get( 'N', 4096) 
+    sampling = Fs#kwargs.get( 'Fs', 44100)
+    return(plottapsdbucata(segnale, (0, len(segnale)/sampling),N=N))
     
-def psdogramma(segnale, secondo, IRF):
+def psdogramma(segnale, secondo, IRF, step=0.08, length=64, Fs=44100):
     a=[]
     #step*length=n° secondi
-    step=0.08
-    length=64
+    #step=0.08
+    #length=64
     #IRF=plottapsdbucata(segnale, (0, len(segnale)))
     plt.close()
     for j in range (0,length):
         tempo=secondo+(j-math.floor(length/2))*step
         print (tempo)
-        psd=plottapsdbucata(segnale,(tempo,tempo+step))
+        psd=plottapsdbucata(segnale,(tempo,tempo+step), N=4096)
         a.append(np.log10(psd[0][2:64+2]/IRF[0][2:64+2]))
         plt.close()
     return (a, psd[1][2:64+2])
     
 def iniziopsod (segnale):
-    IRF=psdnorm(segnale)
+    IRF=psdnorm(segnale, N=4096)
     psog=psdogramma(segnale, 32*0.08, IRF)
     for j in range (0, 32):
-        plt.imshow(np.transpose(psog[0]), vmin=-6, vmax=3)
+        plt.imshow(np.transpose(np.psog[0]), vmin=-6, vmax=3)
         #plt.ylim((max(psog[1]/10), min(psog[1]/10)))
         plt.axvline(x=j, linestyle='dotted', color='r')
         plt.savefig(savedir+'psdogrammi/'+str(j)+'.png')
+        #plt.show()
         plt.close()
 
 # def psdopo (segnale, lowlim, ulim, IRF):
@@ -964,7 +988,7 @@ def psdopo (segnale, lowlim, ulim, IRF):
         current=np.int(j-32)
         final=j
         psog=psog[1:] #Toglie il primo elemento
-        psdpiu=plottapsdbucata(segnale,((final)*0.08, (final+1)*0.08)) # genera il nuovo elemento da mettere in coda (final+1)
+        psdpiu=plottapsdbucata(segnale,((final)*0.08, (final+1)*0.08), N=4096) # genera il nuovo elemento da mettere in coda (final+1)
         print ('Sto inserendo la colonna relativa al secondo '+ str(final*0.08) + ' al ' + str((final+1)*0.08))
         plt.close()
         psdpiu2=np.log10(psdpiu[0][2:64+2]/irf[0][2:64+2])
