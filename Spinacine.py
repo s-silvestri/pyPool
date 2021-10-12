@@ -10,7 +10,7 @@ from scipy import interpolate
 import soundfile as sf
 from librosa import resample
 import scipy.signal as sps
-#Todo: fatti la CDF della distribuzione vera e genera random sulla CDF, poi se non funziona prova a crearti serie temporali di white gaussian noise (wgn) con media mu e varianza sigma, per poi trattarlo come lo tratteresti normalmente.
+#Todo: Una CDF diversa per ogni banda in frequenza per i transienti. Però andrebbero identificati come righe, non come intervalli, se sono crack. La strada brutta, on the other hand, non è un crack ma è un brutto uniforme, e ci si aspetta che porti a un aumento del livello medio broadband.
 file='F:/pint/Misure Coltano/pint/unzipped/run_spezzate/giro_lungo.wav'
 sampling_rate, data=wavfile.read(file)
 durabin=0.2 #Durata in secondi di ogni intervallo su cui fare la PSD
@@ -182,28 +182,28 @@ def plottaquartilisintetici():
     plt.ylim(1e-4,3e3)
     plt.legend()
 
-def plottaquartiliveri():
+def plottaquartiliveri(PSD=psdarray):
     avgarrayvero=[]
     primoquartile=[]
     terzoquartile=[]
-    for j in range (0,np.shape(psdarray)[1]):
-        avgarrayvero.append(np.mean(psdarray[:,j]/IRF[0][j]))
-        primoquartile.append(np.percentile(psdarray[:,j]/IRF[0][j],25))
-        terzoquartile.append(np.percentile(psdarray[:,j]/IRF[0][j],75))
-    plt.loglog(IRF[1], avgarrayvero*IRF[0], label='median psd')
-    plt.loglog(IRF[1], primoquartile*IRF[0], label='first quartile', linestyle='--')
-    plt.loglog(IRF[1], terzoquartile*IRF[0], label='third quartile', linestyle='--')
+    for j in range (0,np.shape(PSD)[1]):
+        avgarrayvero.append(np.mean(PSD[:,j]/IRF[0][j]))
+        primoquartile.append(np.percentile(PSD[:,j]/IRF[0][j],25))
+        terzoquartile.append(np.percentile(PSD[:,j]/IRF[0][j],75))
+    plt.loglog(IRF[1], avgarrayvero, label='median psd')
+    plt.loglog(IRF[1], primoquartile, label='first quartile', linestyle='--')
+    plt.loglog(IRF[1], terzoquartile, label='third quartile', linestyle='--')
     plt.ylim(1e-4,3e3)
     plt.legend()
 
 
-savedirbello='F:/Balto/'
-for j in range (0,100):
-    spettro=genspettroIRF(cdf, pdf)
-    psdsynth=PSDToSeries(44100*1.6, (IRF[1][0],IRF[1][-1]), spettro)
-    #sf.write(savedirbello+str(j)+'.wav', psdsynth, int(44100/2))
-    nsamples=len(psdsynth)*2
-    sf.write(savedirbello+str(j)+'.wav', sps.resample(psdsynth, nsamples), int(44100))
+# savedirbello='F:/Balto/'
+# for j in range (0,100):
+#     spettro=genspettroIRF(cdf, pdf)
+#     psdsynth=PSDToSeries(44100*1.6, (IRF[1][0],IRF[1][-1]), spettro)
+#     #sf.write(savedirbello+str(j)+'.wav', psdsynth, int(44100/2))
+#     nsamples=len(psdsynth)*2
+#     sf.write(savedirbello+str(j)+'.wav', sps.resample(psdsynth, nsamples), int(44100))
 
 # savedirbrutto='F:/Brent/'
 # for j in range (0,100):
